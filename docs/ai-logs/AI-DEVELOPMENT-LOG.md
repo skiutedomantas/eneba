@@ -102,3 +102,24 @@ The user reported that `/api/v1/health` returned an internal server error and re
 - The running API health endpoint now returns `200` with database status `ok`.
 - Frontend build and lint remain passing.
 
+## 2026-11-14 — Phase 2A design system
+
+### Request and approval
+
+The user approved Phase 2A after requesting that all documentation be read and a proposal be presented first. All five files under `docs/` were read before implementation.
+
+### Work performed
+
+- Added Tailwind v4 semantic color tokens matching the supplied palette and global zero-radius styling.
+- Built reusable header/navigation/search, promo banner, section panel, catalog controls, product card/grid, status message, and footer components.
+- Added fictional catalog preview content with original CSS-based artwork; search, filters, and account controls remain presentation-only.
+- Applied a responsive product grid with two columns by default, three at the medium breakpoint, and five at the large breakpoint.
+- Removed the unused Vite starter stylesheet, which contained rounded-corner rules.
+
+### Validation
+
+- Frontend production build and TypeScript check passed.
+- Oxlint passed.
+- Temporary Vite preview returned HTTP 200; the design-token and homepage modules were served successfully.
+- Source verification confirms the requested palette, global zero-radius rule, and responsive grid classes.
+

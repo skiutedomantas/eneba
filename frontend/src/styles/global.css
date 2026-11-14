@@ -1,0 +1,110 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+:root {
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  background: var(--color-background);
+  color-scheme: dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+  border-radius: 0;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--color-background);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button,
+a,
+input,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-savings);
+  outline-offset: 3px;
+}
+
+::selection {
+  color: var(--color-card);
+  background: var(--color-savings);
+}
+
+.promo-pattern {
+  background-image:
+    linear-gradient(135deg, transparent 0 46%, rgb(255 255 255 / 8%) 46% 47%, transparent 47%),
+    linear-gradient(45deg, transparent 0 64%, rgb(255 255 255 / 7%) 64% 65%, transparent 65%);
+  background-size: 4.5rem 4.5rem;
+}
+
+.game-artwork {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  overflow: hidden;
+  place-items: center;
+}
+
+.game-artwork::before,
+.game-artwork::after {
+  position: absolute;
+  content: "";
+  pointer-events: none;
+}
+
+.game-artwork::before {
+  inset: 12%;
+  border: 1px solid rgb(255 255 255 / 45%);
+  transform: rotate(28deg) scale(1.05);
+}
+
+.game-artwork::after {
+  inset: 24% 18%;
+  border: 1px solid rgb(255 255 255 / 28%);
+  transform: rotate(-24deg);
+}
+
+.game-artwork--nebula {
+  background: radial-gradient(ellipse at 68% 28%, #e66a8c 0, transparent 28%),
+    linear-gradient(145deg, #1f0a4d, #6425b8 58%, #311178);
+}
+
+.game-artwork--ember {
+  background: radial-gradient(ellipse at 28% 30%, #ffb347 0, transparent 30%),
+    linear-gradient(155deg, #311178, #a23d77 55%, #1f0a4d);
+}
+
+.game-artwork--forest {
+  background: radial-gradient(ellipse at 72% 34%, #83e916 0, transparent 24%),
+    linear-gradient(140deg, #143d50, #286e68 52%, #1f0a4d);
+}
+
+.game-artwork--chrome {
+  background: radial-gradient(ellipse at 50% 30%, #ded4f4 0, transparent 26%),
+    linear-gradient(145deg, #1f0a4d, #55628c 54%, #311178);
+}
+
+.game-artwork--dusk {
+  background: radial-gradient(ellipse at 72% 25%, #83e916 0, transparent 20%),
+    linear-gradient(155deg, #311178, #a74969 52%, #1f0a4d);
+}
