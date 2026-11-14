@@ -154,3 +154,35 @@ The user approved Phase 2B after requesting a documentation-first proposal and t
 - Best sellers, popular categories, and in-stock special deals are empty until qualifying paid sales or available key inventory exists.
 - The temporary Vite smoke-test server was stopped; the pre-existing PHP server was left running.
 
+## 2026-11-14 — Phase 3 search and seller comparison
+
+### Request and approval
+
+The user approved Phase 3 after reviewing the existing docs, frontend, API, and migration schema. They emphasized typo and partial-query quality and clear seller/price/region/availability comparison. Search request rate limiting was explicitly deferred to Phase 6.
+
+### Work performed
+
+- Implemented `GET /search` with Unicode NFKC normalization, case folding, validation, MySQL FULLTEXT natural/prefix candidates, and a bounded name-gram fallback. Catalog filters apply before title-similarity scoring, which is capped at 100 candidates.
+- Added two/three-character gram generation and a rebuild service/CLI command; the repeatable seed refreshes the derived index.
+- Reused catalog filtering and pagination for search results, with relevance sorting and response metadata describing the candidate limit/cap.
+- Implemented `GET /products/{slug}` with active product details and active offers from approved sellers, including seller, platform, region, current/compare-at pricing, discount, and available stock.
+- Added a search results page and made the global search bar navigate to URL-backed results. Added loading, retry, error, empty, filter, and pagination states.
+- Made product cards link to detail pages. Added a comparison view where each offer visibly lists seller, price, platform, region, and availability; users can select an offer for display.
+- Added two disabled demo seller accounts and comparable fictional offers for one product. No digital keys or completed orders were added.
+- Updated API, database, and implementation-plan documentation with the implemented behavior and search-index lifecycle.
+
+### Validation
+
+- Backend PHP syntax checks passed.
+- `php backend/tests/catalog_endpoints.php` passed.
+- `php backend/tests/search_and_product_endpoints.php` passed exact, normalized, partial, mid-word partial, typo, no-result, filter, pagination, candidate-cap, active-product, offer-order, and no-inventory checks.
+- Frontend production build and Oxlint passed.
+- HTTP smoke checks returned the expected results for partial search, typo search, product detail, missing product (`404`), and invalid short query (`422`).
+- Repeatable seed rebuilt the search index and added seller comparison offers without adding key inventory.
+
+### Scope notes
+
+- Search throttling remains deferred to Phase 6 as approved.
+- Authentication, cart, checkout, orders, and digital-key delivery remain unimplemented.
+- Product offer selection is presentational only; no inventory is reserved and no purchase action is exposed.
+

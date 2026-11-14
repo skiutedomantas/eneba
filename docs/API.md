@@ -11,9 +11,9 @@
 - Apply bounded pagination and allowlisted sort fields/directions. Never interpolate unchecked request values into SQL.
 - State-changing requests require CSRF validation. Do not enable permissive CORS.
 
-## Phase 2B implementation scope
+## Implemented scope through Phase 3
 
-Phase 2B implements the health check, product catalog and reference-data lookups, and four independent read-only homepage endpoints below. Authentication, registration, login/logout, cart, checkout, orders, digital-key delivery, search, and individual product detail remain future-phase contracts and are not implemented in Phase 2B.
+Phases 2B and 3 implement the health check, product catalog and reference-data lookups, four independent homepage endpoints, product search, and product detail with seller-offer comparison. Authentication, registration, login/logout, cart, checkout, orders, and digital-key delivery remain future-phase contracts.
 
 An empty result is a successful response (`200`) with `"data": []`. The API does not invent sales or inventory to populate a section. In particular, best sellers require completed orders in the recent period, and special deals require available digital-key inventory. The current demo seed intentionally creates neither.
 
@@ -39,7 +39,7 @@ Database configuration or availability errors return `503` with the standard err
 
 ## Authentication
 
-Reserved for the authentication phase; not implemented in Phase 2B.
+Reserved for the authentication phase; not implemented through Phase 3.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -156,8 +156,8 @@ For best sellers and popular categories, only orders with `status="paid"` and `p
 | `GET` | `/categories` | Active category filter options. |
 | `GET` | `/platforms` | Active platform filter options. |
 | `GET` | `/regions` | Active region filter options. |
-| `GET` | `/search` | Global search. Query: `q`, optional catalog filters, `page`, `perPage`. |
-| `GET` | `/products/{slug}` | Product details and active seller offers, including platform, region, currency, availability count, and compare-at price when present. |
+| `GET` | `/search` | Global search with typo and partial-word tolerance. |
+| `GET` | `/products/{slug}` | Active product details and approved sellers' active offers for comparison. |
 
 `GET /products` query parameters:
 
@@ -211,19 +211,101 @@ The three examples correspond to `/categories`, `/platforms`, and `/regions`, re
 
 `compareAtPriceMinor` is null when the offer has no advertised comparison price. The API calculates any displayed discount from the compare-at and current prices, in the offer's currency; it must not trust a client-supplied percentage. An offer is eligible for the special-deals section only when the compare-at price is greater than the current price and the offer is active, in its deal window, and has available inventory.
 
-Search implementation:
+`GET /search` accepts:
 
-1. Normalize the query (Unicode normalization, case folding, whitespace collapse; optionally remove punctuation) and validate a practical length limit.
-2. Use MySQL full-text search for exact/related term relevance.
-3. If result confidence/count is low, look up candidates from the derived trigram index, aggregate gram overlap, cap candidates (for example, top 100), and score title similarity with bounded edit distance in application code.
-4. Merge/deduplicate, apply active product and requested filters, rank, and paginate. Do not compute edit distance across the entire catalog.
-5. Add a minimum query length and rate limit to limit expensive fuzzy queries. Measure relevance and latency before tuning thresholds.
+- `q` (required; 2–100 normalized letters/numbers; raw input up to 200 characters)
+- `page` (default `1`, positive integer up to `10000`)
+- `perPage` (default `20`, integer `1..48`)
+- The same `platform`, `region`, `category`, `currency`, `minPriceMinor`, and `maxPriceMinor` filters as `/products`
+- `sort`: `relevance` (default), `newest`, `price_asc`, `price_desc`, or `popular`
+
+Queries are Unicode NFKC-normalized, case-folded, and reduced to letter/number tokens with collapsed whitespace. MySQL FULLTEXT natural-language and token-prefix matches are ranked first. When fewer than eight FULLTEXT candidates are found, the API merges up to 1,000 candidates from the derived product-name gram index. It applies the product's catalog filters before scoring title similarity in PHP, which is limited to 100 products; ordinary catalog requests do not invoke fuzzy scoring.
+
+Search response:
+
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "slug": "starlight-odyssey",
+      "name": "Starlight Odyssey",
+      "description": "A fictional role-playing adventure.",
+      "imageUrl": "/images/starlight-odyssey.svg",
+      "lowestOffer": {
+        "offerId": 1,
+        "priceMinor": 1899,
+        "compareAtPriceMinor": 4999,
+        "currency": "EUR",
+        "platform": { "code": "pc", "name": "PC" },
+        "region": { "code": "global", "name": "Global" },
+        "availableQuantity": 0,
+        "discountPercent": 62
+      }
+    }
+  ],
+  "meta": {
+    "q": "starlight ody",
+    "page": 1,
+    "perPage": 20,
+    "total": 1,
+    "sort": "relevance",
+    "currency": "EUR",
+    "candidateLimit": 100,
+    "capped": false
+  }
+}
+```
+
+`meta.total` describes the filtered, ranked results in the bounded scored set. `capped` is true when 100 eligible scoring candidates (or the 1,000-result lexical pool) are reached; in that case, more matches may exist beyond this page set. Invalid or too-short queries return `422 VALIDATION_ERROR`; an unmatched query returns `200` with empty `data`. Search-specific request rate limiting is deferred to Phase 6; query length, pagination, and candidate count are bounded in this phase.
+
+`GET /products/{slug}` returns `404 NOT_FOUND` when the product is missing or inactive. Only active products and active offers from approved sellers with active platform/region options are exposed. Offers include zero-stock rows so availability is explicit and are grouped by currency, then ordered by price and offer ID within each currency; amounts in different currencies are not treated as directly comparable. A product with no qualifying offers returns an empty `offers` list.
+
+```json
+{
+  "data": {
+    "product": {
+      "id": 1,
+      "slug": "starlight-odyssey",
+      "name": "Starlight Odyssey",
+      "description": "A fictional role-playing adventure.",
+      "imageUrl": "/images/starlight-odyssey.svg"
+    },
+    "offers": [
+      {
+        "offerId": 1,
+        "seller": { "id": 1, "name": "Catalog Demo Seller" },
+        "priceMinor": 1899,
+        "compareAtPriceMinor": 4999,
+        "currency": "EUR",
+        "platform": { "code": "pc", "name": "PC" },
+        "region": { "code": "global", "name": "Global" },
+        "availableQuantity": 0,
+        "discountPercent": 62
+      },
+      {
+        "offerId": 4,
+        "seller": { "id": 2, "name": "Compare Demo Seller" },
+        "priceMinor": 2199,
+        "compareAtPriceMinor": 3999,
+        "currency": "EUR",
+        "platform": { "code": "pc", "name": "PC" },
+        "region": { "code": "global", "name": "Global" },
+        "availableQuantity": 0,
+        "discountPercent": 45
+      }
+    ]
+  }
+}
+```
+
+The browser can select an offer for display, but does not reserve inventory or create a cart in Phase 3.
 
 This hybrid is practical without another service at early scale. If catalog size, language requirements, or search latency outgrow it, migrate search behind the same endpoint to a dedicated engine such as Meilisearch or OpenSearch.
 
 ## Cart and checkout
 
-Reserved for a later phase; not implemented in Phase 2B.
+Reserved for Phase 4; not implemented through Phase 3.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -237,7 +319,7 @@ Checkout response on success: `201` with order ID, status, currency, totals, and
 
 ## Orders and key delivery
 
-Reserved for a later phase; not implemented in Phase 2B.
+Reserved for Phase 5; not implemented through Phase 3.
 
 | Method | Path | Purpose |
 |---|---|---|

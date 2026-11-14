@@ -11,6 +11,7 @@ interface ApiResourceState<T> {
 function useApiResource<T>(
   resourceKey: string,
   request: (signal: AbortSignal) => Promise<T>,
+  enabled = true,
 ): ApiResourceState<T> {
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -18,6 +19,13 @@ function useApiResource<T>(
   const [reloadCount, setReloadCount] = useState(0)
 
   useEffect(() => {
+    if (!enabled) {
+      setData(null)
+      setError(null)
+      setLoading(false)
+      return
+    }
+
     const controller = new AbortController()
     setLoading(true)
     setError(null)
@@ -48,7 +56,7 @@ function useApiResource<T>(
     return () => controller.abort()
     // The resource key changes whenever its request parameters change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resourceKey, reloadCount])
+  }, [enabled, resourceKey, reloadCount])
 
   return {
     data,

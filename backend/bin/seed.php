@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Database\Connection;
+use App\Services\ProductSearchIndexService;
 
 require dirname(__DIR__) . '/bootstrap.php';
 
@@ -35,4 +36,6 @@ foreach ($seedFiles as $seedFile) {
     }
     fwrite(STDOUT, 'Loaded: ' . basename($seedFile) . "\n");
 }
+$indexedGrams = ProductSearchIndexService::rebuild($pdo);
+fwrite(STDOUT, "Rebuilt product search index with {$indexedGrams} grams.\n");
 $pdo->commit();

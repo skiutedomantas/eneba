@@ -71,10 +71,24 @@ SQL;
      * } $filters
      * @return array{products: list<array<string, mixed>>, total: int}
      */
-    public function listCatalog(array $filters): array
+    public function listCatalog(array $filters, ?array $productIds = null): array
     {
+        if ($productIds === []) {
+            return ['products' => [], 'total' => 0];
+        }
+
         $bindings = [':currency' => $filters['currency']];
         $offerConditions = '';
+        $candidateConditions = '';
+        if ($productIds !== null) {
+            $candidatePlaceholders = [];
+            foreach (array_values($productIds) as $index => $productId) {
+                $placeholder = ':candidate_id_' . $index;
+                $candidatePlaceholders[] = $placeholder;
+                $bindings[$placeholder] = $productId;
+            }
+            $candidateConditions = 'product.id IN (' . implode(', ', $candidatePlaceholders) . ')';
+        }
         if ($filters['platform'] !== null) {
             $offerConditions .= ' AND platform.code = :platform';
             $bindings[':platform'] = $filters['platform'];
@@ -85,6 +99,9 @@ SQL;
         }
 
         $where = ["product.status = 'active'"];
+        if ($candidateConditions !== '') {
+            $where[] = $candidateConditions;
+        }
         if ($filters['platform'] !== null || $filters['region'] !== null) {
             $where[] = 'selected.offer_id IS NOT NULL';
         }
@@ -184,6 +201,70 @@ SQL
         $statement->execute();
 
         return ['products' => $statement->fetchAll(), 'total' => $total];
+    }
+
+    /**
+     * @return array{id: int, slug: string, name: string, description: string, image_url: ?string}|null
+     */
+    public function findActiveBySlug(string $slug): ?array
+    {
+        $statement = $this->pdo->prepare(
+            "SELECT id, slug, name, description, image_url
+             FROM products
+             WHERE slug = :slug AND status = 'active'
+             LIMIT 1",
+        );
+        $statement->execute(['slug' => $slug]);
+        $product = $statement->fetch();
+
+        return $product === false ? null : $product;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function activeOffers(int $productId): array
+    {
+        $statement = $this->pdo->prepare(<<<'SQL'
+SELECT
+    offer.id AS offer_id,
+    seller.id AS seller_id,
+    seller.display_name AS seller_name,
+    offer.price_minor,
+    offer.compare_at_price_minor,
+    offer.currency,
+    platform.code AS platform_code,
+    platform.name AS platform_name,
+    region.code AS region_code,
+    region.name AS region_name,
+    COUNT(digital_key.id) AS available_quantity
+FROM offers AS offer
+JOIN seller_profiles AS seller
+  ON seller.id = offer.seller_id AND seller.status = 'approved'
+JOIN platforms AS platform
+  ON platform.id = offer.platform_id AND platform.status = 'active'
+JOIN regions AS region
+  ON region.id = offer.region_id AND region.status = 'active'
+LEFT JOIN digital_keys AS digital_key
+  ON digital_key.offer_id = offer.id AND digital_key.status = 'available'
+WHERE offer.product_id = :product_id
+  AND offer.status = 'active'
+GROUP BY
+    offer.id,
+    seller.id,
+    seller.display_name,
+    offer.price_minor,
+    offer.compare_at_price_minor,
+    offer.currency,
+    platform.code,
+    platform.name,
+    region.code,
+    region.name
+ORDER BY offer.currency ASC, offer.price_minor ASC, offer.id ASC
+SQL);
+        $statement->execute(['product_id' => $productId]);
+
+        return $statement->fetchAll();
     }
 
     /**

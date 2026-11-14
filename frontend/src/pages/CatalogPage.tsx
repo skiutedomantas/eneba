@@ -13,6 +13,7 @@ import {
   getPlatforms,
   getProducts,
   getRegions,
+  getSearchResults,
 } from '../lib/api/catalog'
 import type { CatalogQuery } from '../lib/api/catalog'
 
@@ -44,18 +45,25 @@ function toMinorPrice(value: string): string | null {
   return Number.isSafeInteger(total) ? String(total) : null
 }
 
-function initialFilters(params: URLSearchParams): CatalogFilterValues {
+function initialFilters(
+  params: URLSearchParams,
+  searchMode: boolean,
+): CatalogFilterValues {
   return {
     category: params.get('category') ?? '',
     platform: params.get('platform') ?? '',
     region: params.get('region') ?? '',
     minPrice: toMajorPrice(params.get('minPriceMinor')),
     maxPrice: toMajorPrice(params.get('maxPriceMinor')),
-    sort: params.get('sort') ?? 'newest',
+    sort: params.get('sort') ?? (searchMode ? 'relevance' : 'newest'),
   }
 }
 
-function CatalogPage() {
+interface CatalogPageProps {
+  searchMode?: boolean
+}
+
+function CatalogPage({ searchMode = false }: CatalogPageProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const searchKey = searchParams.toString()
   const [priceError, setPriceError] = useState<string | null>(null)
@@ -71,13 +79,19 @@ function CatalogPage() {
       currency: params.get('currency') ?? 'EUR',
       minPriceMinor: params.get('minPriceMinor') ?? '',
       maxPriceMinor: params.get('maxPriceMinor') ?? '',
-      sort: params.get('sort') ?? 'newest',
+      sort: params.get('sort') ?? (searchMode ? 'relevance' : 'newest'),
     }
-  }, [searchKey])
-  const catalogKey = JSON.stringify(query)
+  }, [searchKey, searchMode])
+  const searchQuery = searchMode
+    ? new URLSearchParams(searchKey).get('q')?.trim() ?? ''
+    : ''
+  const catalogKey = JSON.stringify({ mode: searchMode, query, searchQuery })
 
   const products = useApiResource(catalogKey, (signal) =>
-    getProducts(query, signal),
+    searchMode && searchQuery
+      ? getSearchResults({ ...query, q: searchQuery }, signal)
+      : getProducts(query, signal),
+    !searchMode || searchQuery.length > 0,
   )
   const categories = useApiResource('lookup:categories', getCategories)
   const platforms = useApiResource('lookup:platforms', getPlatforms)
@@ -114,6 +128,7 @@ function CatalogPage() {
     next.set('perPage', String(query.perPage))
     next.set('currency', 'EUR')
     next.set('sort', filters.sort)
+    if (searchMode && searchQuery) next.set('q', searchQuery)
     if (filters.category) next.set('category', filters.category)
     if (filters.platform) next.set('platform', filters.platform)
     if (filters.region) next.set('region', filters.region)
@@ -129,7 +144,7 @@ function CatalogPage() {
   }
 
   const result = products.data
-  const filters = initialFilters(new URLSearchParams(searchKey))
+  const filters = initialFilters(new URLSearchParams(searchKey), searchMode)
   const totalPages = result
     ? Math.max(1, Math.ceil(result.meta.total / result.meta.perPage))
     : 1
@@ -139,16 +154,21 @@ function CatalogPage() {
       <SiteHeader />
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-8 md:py-8">
         <SectionPanel
-          description="Browse the current catalog and narrow results by category, platform, region, or price."
-          eyebrow="Game marketplace"
+          description={
+            searchMode
+              ? `Search results for "${searchQuery}". Refine by category, platform, region, or price.`
+              : 'Browse the current catalog and narrow results by category, platform, region, or price.'
+          }
+          eyebrow={searchMode ? 'Search' : 'Game marketplace'}
           id="catalog"
-          title="Games and digital goods"
+          title={searchMode ? 'Search results' : 'Games and digital goods'}
         >
           <CatalogControls
             categories={categories.data?.data ?? []}
             platforms={platforms.data?.data ?? []}
             regions={regions.data?.data ?? []}
             initialValues={filters}
+            allowRelevance={searchMode}
             key={searchKey}
             onApply={applyFilters}
           />
@@ -170,16 +190,34 @@ function CatalogPage() {
               />
             </div>
           ) : null}
+          {searchMode && !searchQuery ? (
+            <StatusMessage
+              message="Use the search bar above to find games and digital products."
+              title="Start a search"
+              tone="notice"
+            />
+          ) : null}
           {result ? (
             <p className="mb-4 text-sm text-muted" aria-live="polite">
               {result.meta.total} products
+              {searchMode && result.meta.capped
+                ? ' — showing matches from the first 100 search candidates'
+                : ''}
             </p>
           ) : null}
           <ResourceFeedback
-            empty={result !== null && result.data.length === 0}
-            emptyMessage="Try changing or clearing your filters."
-            error={products.error}
-            loading={products.loading}
+            empty={
+              Boolean(searchQuery || !searchMode) &&
+              result !== null &&
+              result.data.length === 0
+            }
+            emptyMessage={
+              searchMode
+                ? 'Try a partial title, check the spelling, or clear some filters.'
+                : 'Try changing or clearing your filters.'
+            }
+            error={searchMode && !searchQuery ? null : products.error}
+            loading={(!searchMode || Boolean(searchQuery)) && products.loading}
             onRetry={products.reload}
           />
           {result && result.data.length > 0 && !products.loading ? (

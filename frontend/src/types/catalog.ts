@@ -65,5 +65,33 @@ export interface ProductListResponse {
     total: number
     sort: string
     currency: string
+    q?: string
+    candidateLimit?: number
+    capped?: boolean
+  }
+}
+
+export interface ProductDetailOffer {
+  offerId: number
+  seller: {
+    id: number
+    name: string
+  }
+  priceMinor: number
+  compareAtPriceMinor: number | null
+  currency: string
+  platform: PriceOffer['platform']
+  region: PriceOffer['region']
+  availableQuantity: number
+  discountPercent: number | null
+}
+
+export interface ProductDetailResponse {
+  data: {
+    product: Pick<
+      ProductCardData,
+      'id' | 'slug' | 'name' | 'description' | 'imageUrl'
+    >
+    offers: ProductDetailOffer[]
   }
 }

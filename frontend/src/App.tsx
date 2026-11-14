@@ -4,6 +4,7 @@ import { SiteHeader } from './components/layout/SiteHeader'
 import { StatusMessage } from './components/ui/StatusMessage'
 import { HomePage } from './features/home/HomePage'
 import { CatalogPage } from './pages/CatalogPage'
+import { ProductDetailPage } from './pages/ProductDetailPage'
 
 function NotFoundPage() {
   return (
@@ -32,6 +33,8 @@ function App() {
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/store" element={<CatalogPage />} />
+      <Route path="/search" element={<CatalogPage searchMode />} />
+      <Route path="/products/:slug" element={<ProductDetailPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   )

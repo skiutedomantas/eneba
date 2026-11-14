@@ -20,6 +20,40 @@ final class CatalogService
      */
     public function listProducts(array $query): array
     {
+        $filters = self::parseFilters($query);
+        $result = $this->products->listCatalog($filters);
+
+        return [
+            'data' => array_map(
+                static fn (array $row): array => self::presentProduct($row),
+                $result['products'],
+            ),
+            'meta' => [
+                'page' => $filters['page'],
+                'perPage' => $filters['perPage'],
+                'total' => $result['total'],
+                'sort' => $filters['sort'],
+                'currency' => $filters['currency'],
+            ],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $query
+     * @return array{
+     *   page: int,
+     *   perPage: int,
+     *   platform: ?string,
+     *   region: ?string,
+     *   category: ?string,
+     *   currency: string,
+     *   minPriceMinor: ?int,
+     *   maxPriceMinor: ?int,
+     *   sort: string
+     * }
+     */
+    public static function parseFilters(array $query, bool $search = false): array
+    {
         $allowedParameters = [
             'page',
             'perPage',
@@ -31,6 +65,9 @@ final class CatalogService
             'maxPriceMinor',
             'sort',
         ];
+        if ($search) {
+            $allowedParameters[] = 'q';
+        }
         $unknownParameters = array_diff(array_keys($query), $allowedParameters);
         if ($unknownParameters !== []) {
             $fields = [];
@@ -63,18 +100,21 @@ final class CatalogService
             );
         }
 
-        $sort = $query['sort'] ?? 'newest';
+        $allowedSorts = $search
+            ? ['relevance', 'newest', 'price_asc', 'price_desc', 'popular']
+            : ['newest', 'price_asc', 'price_desc', 'popular'];
+        $sort = $query['sort'] ?? ($search ? 'relevance' : 'newest');
         if (
             !is_string($sort)
-            || !in_array($sort, ['newest', 'price_asc', 'price_desc', 'popular'], true)
+            || !in_array($sort, $allowedSorts, true)
         ) {
             throw new ValidationError(
                 'One or more query parameters are invalid.',
-                ['sort' => 'Must be newest, price_asc, price_desc, or popular.'],
+                ['sort' => 'The requested sort order is not supported.'],
             );
         }
 
-        $result = $this->products->listCatalog([
+        return [
             'page' => $page,
             'perPage' => $perPage,
             'platform' => $platform,
@@ -84,20 +124,6 @@ final class CatalogService
             'minPriceMinor' => $minPriceMinor,
             'maxPriceMinor' => $maxPriceMinor,
             'sort' => $sort,
-        ]);
-
-        return [
-            'data' => array_map(
-                static fn (array $row): array => self::presentProduct($row),
-                $result['products'],
-            ),
-            'meta' => [
-                'page' => $page,
-                'perPage' => $perPage,
-                'total' => $result['total'],
-                'sort' => $sort,
-                'currency' => $currency,
-            ],
         ];
     }
 

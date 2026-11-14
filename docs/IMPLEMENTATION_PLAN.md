@@ -49,12 +49,15 @@ Build a thin vertical slice early, then extend it with tested business flows. Ke
 
 ## Phase 3 — Search and product comparison
 
-- Implement full-text search, normalized query handling, bounded trigram fallback, and relevance sorting.
-- Add product detail and active multi-seller offer comparison.
-- Build global search UI with loading, no-results, and error states.
-- Test typo cases, filter interactions, pagination, and candidate caps against seeded products.
+- Implement `GET /search` using Unicode-normalized input, MySQL FULLTEXT natural/prefix matching, a bounded gram-index fallback, and relevance-first pagination. Apply catalog filters before scoring no more than 100 candidates.
+- Maintain the derived name-gram index during seeding and provide an explicit rebuild command for catalog name/status changes. Cap fuzzy candidates at 100; defer search request rate limiting to Phase 6.
+- Implement `GET /products/{slug}` with active product details and active offers from approved sellers, including seller, platform, region, compare-at/current price, discount, and available inventory.
+- Add distinct fictional sellers and comparable offers for demo product detail pages without adding digital keys or implying stock.
+- Connect the global search bar to a URL-backed results page with loading, error, empty, retry, filter, and pagination states. Make product cards link to detail pages.
+- Build a seller comparison view where price, seller, platform, region, and stock status are visible together; allow a customer to select an offer for display without implementing cart/checkout behavior.
+- Document API request/response contracts and the search index lifecycle. Test exact, partial, typo, no-result, validation, filters, pagination, candidate bounds, product not-found, seller ordering, and inactive records.
 
-**Exit:** exact and near-match queries return relevant active products without unbounded scans.
+**Exit:** exact, partial, and typo-tolerant queries return relevant active products within the candidate bound; product details clearly compare active seller offers and their region and availability without implying inventory that is not present.
 
 ## Phase 4 — Authentication and cart
 
@@ -101,6 +104,7 @@ Build a thin vertical slice early, then extend it with tested business flows. Ke
 - Key endpoints do not reveal content before paid status and do not cache it.
 - Home sections load independently; a failure in one does not hide the others.
 - Search fuzzy matching is bounded, measurable, and does not degrade ordinary catalog browsing.
+- Search request throttling is implemented during Phase 6 hardening; Phase 3 bounds query size, page size, and fuzzy candidates.
 - The specified palette and zero-radius geometry are applied consistently through reusable components.
 - Homepage and catalog grids render two columns on mobile, three on tablet, and five on desktop.
 

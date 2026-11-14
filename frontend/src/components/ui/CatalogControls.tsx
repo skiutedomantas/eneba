@@ -15,6 +15,7 @@ interface CatalogControlsProps {
   platforms: CodedOption[]
   regions: CodedOption[]
   initialValues: CatalogFilterValues
+  allowRelevance?: boolean
   onApply: (
     event: FormEvent<HTMLFormElement>,
     values: CatalogFilterValues,
@@ -29,6 +30,7 @@ function CatalogControls({
   platforms,
   regions,
   initialValues,
+  allowRelevance = false,
   onApply,
 }: CatalogControlsProps) {
   const [values, setValues] = useState(initialValues)
@@ -116,6 +118,7 @@ function CatalogControls({
             onChange={(event) => update('sort', event.target.value)}
             value={values.sort}
           >
+            {allowRelevance ? <option value="relevance">Relevance</option> : null}
             <option value="newest">Newest</option>
             <option value="price_asc">Price: low to high</option>
             <option value="price_desc">Price: high to low</option>

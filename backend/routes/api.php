@@ -6,11 +6,14 @@ use App\Database\Connection;
 use App\Repositories\HomeRepository;
 use App\Repositories\LookupRepository;
 use App\Repositories\ProductRepository;
-use App\Support\JsonResponse;
-use App\Support\ValidationError;
+use App\Repositories\ProductSearchRepository;
 use App\Services\CatalogService;
 use App\Services\HomeService;
 use App\Services\LookupService;
+use App\Services\ProductDetailService;
+use App\Services\SearchService;
+use App\Support\JsonResponse;
+use App\Support\ValidationError;
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
@@ -58,6 +61,7 @@ if ($method === 'GET' && $path === '/api/v1/health') {
 
 $getEndpoints = [
     '/api/v1/products',
+    '/api/v1/search',
     '/api/v1/categories',
     '/api/v1/platforms',
     '/api/v1/regions',
@@ -67,13 +71,37 @@ $getEndpoints = [
     '/api/v1/home/popular-categories',
 ];
 
-if ($method === 'GET' && in_array($path, $getEndpoints, true)) {
+$productDetailMatch = [];
+$isProductDetailPath = is_string($path)
+    && preg_match('~^/api/v1/products/([a-z0-9]+(?:-[a-z0-9]+)*)$~D', $path, $productDetailMatch) === 1;
+
+if ($method === 'GET' && (in_array($path, $getEndpoints, true) || $isProductDetailPath)) {
     try {
         $pdo = Connection::create();
+        if ($isProductDetailPath) {
+            $response = (new ProductDetailService(
+                new ProductRepository($pdo),
+            ))->getBySlug($productDetailMatch[1]);
+            if ($response === null) {
+                JsonResponse::send(404, [
+                    'error' => [
+                        'code' => 'NOT_FOUND',
+                        'message' => 'The requested product was not found.',
+                        'requestId' => $requestId,
+                    ],
+                ]);
+            }
+            JsonResponse::send(200, $response);
+        }
+
         $response = match ($path) {
             '/api/v1/products' => (new CatalogService(
                 new ProductRepository($pdo),
             ))->listProducts($_GET),
+            '/api/v1/search' => (new SearchService(
+                new ProductRepository($pdo),
+                new ProductSearchRepository($pdo),
+            ))->search($_GET),
             '/api/v1/categories' => (new LookupService(
                 new LookupRepository($pdo),
             ))->categories($_GET),
@@ -137,7 +165,7 @@ if ($method === 'GET' && in_array($path, $getEndpoints, true)) {
     }
 }
 
-if (in_array($path, $getEndpoints, true)) {
+if (in_array($path, $getEndpoints, true) || $isProductDetailPath) {
     header('Allow: GET');
     JsonResponse::send(405, [
         'error' => [

@@ -56,9 +56,9 @@ An offer qualifies as a special deal only when it is active, within its configur
 
 | Table | Important columns | Notes |
 |---|---|---|
-| `product_search_grams` | `product_id`, `gram`, `weight` | Optional derived trigram index for typo-tolerant fallback; unique `(product_id, gram)`, index `(gram, product_id)`. Regenerate when a product name changes. |
+| `product_search_grams` | `product_id`, `gram`, `weight` | Derived two/three-character gram index for typo-tolerant fallback; unique `(product_id, gram)`, index `(gram, product_id)`. Rebuild when product names or active status change. |
 
-MySQL `FULLTEXT` over product name and description can provide the first-pass relevance search. Trigram rows are derived data and can be rebuilt from active product names. See `API.md` for query strategy.
+MySQL `FULLTEXT` over product name and description provides first-pass relevance and token-prefix search. Gram rows are derived data generated from normalized active product names. The repeatable seed refreshes them, and `php backend/bin/rebuild-search-index.php` rebuilds them after catalog name/status changes. Search normalization uses PHP `intl` and `mbstring`; these extensions must be enabled in the backend runtime. See `API.md` for query bounds, fallback behavior, and response metadata.
 
 ## Relationships
 
