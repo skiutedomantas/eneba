@@ -30,7 +30,7 @@ The following is a logical schema; migrations should define exact lengths, nulla
 | `platforms` | `id`, `code` (unique), `name`, `status` | Examples: PC, PlayStation, Xbox. |
 | `regions` | `id`, `code` (unique), `name`, `status` | Examples: global, EU, US. |
 | `offers` | `id`, `product_id`, `seller_id`, `platform_id`, `region_id`, `price_minor`, `compare_at_price_minor` (nullable), `currency`, `status`, `deal_starts_at`, `deal_ends_at`, timestamps | `seller_id` references `seller_profiles`; an offer identifies what is being sold and by whom. `price_minor` is the current selling price. `compare_at_price_minor` is the reference price used to calculate and display a discount; it is null when no comparison price is advertised. |
-| `digital_keys` | `id`, `offer_id`, `ciphertext`, `nonce`, `key_version`, `status`, `order_item_id` (nullable, unique), timestamps | `status`: `available`, `sold`, or `disabled`. Ciphertext is authenticated-encrypted; key is assigned to at most one order item. Never expose this table directly. |
+| `digital_keys` | `id`, `offer_id`, `ciphertext`, `nonce`, `key_version`, `status`, `order_item_id` (nullable foreign key), timestamps | `status`: `available`, `sold`, or `disabled`. Ciphertext is authenticated-encrypted; each key row can be assigned to at most one order item. Never expose this table directly. |
 
 ### Shopping and order history
 
@@ -69,7 +69,7 @@ MySQL `FULLTEXT` over product name and description can provide the first-pass re
 - `offers` 1—many `digital_keys`: each key is stock for one specific offer.
 - `users` 1—1 active `carts`; `carts` 1—many `cart_items`; each cart item references one offer.
 - `users` 1—many `orders`; `orders` 1—many `order_items`; each item references its original offer and stores purchase snapshots.
-- `order_items` 1—many `digital_keys` after purchase (one per purchased unit); each key's nullable unique `order_item_id` enforces single-order assignment.
+- `order_items` 1—many `digital_keys` after purchase (one per purchased unit); each key row's nullable `order_item_id` foreign key can refer to only one order item, while allowing multiple keys for an item with quantity greater than one.
 - `users` and `order_items` 1—many `key_access_logs` rows provide an access audit trail.
 - `products` 1—many derived `product_search_grams` rows.
 
@@ -79,7 +79,7 @@ Add indexes for:
 
 - Unique `users.email`, `products.slug`, category/platform/region codes, `sessions.token_hash`, and seller profile `user_id`.
 - `offers(product_id, status)`, `offers(platform_id, region_id, status, price_minor)`, and `offers(seller_id, status)`.
-- `digital_keys(offer_id, status, id)` for availability/locking and the unique `digital_keys.order_item_id`.
+- `digital_keys(offer_id, status, id)` for availability/locking and `digital_keys(order_item_id)` for order delivery.
 - `cart_items(cart_id, offer_id)` unique; `orders(user_id, created_at)`; `order_items(order_id)`.
 - `product_categories(category_id, product_id)` and gram lookup `(gram, product_id)`.
 - A MySQL full-text index on active-search fields where supported by the chosen query design.

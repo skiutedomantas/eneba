@@ -1,0 +1,20 @@
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Node/Vite
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# PHP/runtime
+backend/vendor/
+backend/logs/
+*.log
+
+# Editor/OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

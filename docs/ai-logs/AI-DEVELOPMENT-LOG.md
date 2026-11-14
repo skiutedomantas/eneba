@@ -50,3 +50,34 @@ After approving the architecture, the user requested a nullable `compare_at_pric
 - Documentation only; no application code or dependencies were changed.
 - No React/PHP application was initialized.
 
+## 2026-11-14 — Phase 1 foundation
+
+### Request and approval
+
+The user approved Phase 1 and npm after reviewing the proposed sequence. The user had requested that the full documentation folder be read before any changes; all five documentation files were read before work began.
+
+### Work performed
+
+- Scaffolded the React/TypeScript/Vite frontend and added Tailwind CSS and React Router.
+- Added a dark-theme startup page, browser routing, Tailwind's Vite plugin, API proxy configuration, and frontend build/lint scripts.
+- Added the framework-free PHP API bootstrap, PDO connection, JSON response helper, health endpoint, and request IDs.
+- Added the initial MySQL schema migration, idempotent migration runner, and repeatable fictional catalog/reference-data seed.
+- Added the root environment example, ignore rules, and local setup instructions.
+- Added `compare_at_price_minor` to the migration. Corrected the database documentation so one order item may reference multiple digital keys (one per purchased unit), while each key row can be assigned to only one order item.
+
+### Validation
+
+- Frontend production build and TypeScript check passed.
+- Frontend lint passed.
+- Frontend npm audit reported zero vulnerabilities.
+- PHP syntax checks passed for all backend PHP files.
+- Created the local `gamehub` database, applied the migration, and loaded the seed; rerunning the migration and seed completed safely.
+- Direct API health request and Vite-proxied health request both returned `200` with database status `ok`; an unknown API route returned the expected JSON `404`.
+- The schema check confirmed `offers.compare_at_price_minor` and `digital_keys.order_item_id`; starter seed data contains three products and three categories.
+
+### Scope notes
+
+- No application features beyond the Phase 1 startup foundation were implemented.
+- No real users, offers, or digital keys were seeded.
+- The local API and Vite smoke-test servers were temporary.
+
