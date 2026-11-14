@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 600" role="img" aria-labelledby="title">
+  <title id="title">Starlight Odyssey abstract game artwork</title>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0.8" y2="1">
+      <stop stop-color="#1F0A4D"/>
+      <stop offset=".58" stop-color="#6A2CB8"/>
+      <stop offset="1" stop-color="#4518AC"/>
+    </linearGradient>
+    <radialGradient id="planet">
+      <stop stop-color="#E66A8C"/>
+      <stop offset="1" stop-color="#E66A8C" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <path fill="url(#sky)" d="M0 0h480v600H0z"/>
+  <circle cx="338" cy="176" r="152" fill="url(#planet)"/>
+  <circle cx="336" cy="171" r="57" fill="#E66A8C"/>
+  <path fill="none" stroke="#fff" stroke-opacity=".6" stroke-width="2" d="M38 435 243 145l196 290M82 504h317"/>
+  <path fill="#83E916" d="m241 260 28 54h-56z"/>
+  <path fill="#fff" d="m91 120 4 12 12 4-12 4-4 12-4-12-12-4 12-4zM173 82l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/>
+  <path fill="#1F0A4D" d="M0 470 126 345l87 88 88-130 179 178v119H0z" opacity=".78"/>
+</svg>

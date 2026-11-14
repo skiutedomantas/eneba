@@ -16,13 +16,13 @@ function SiteHeader() {
           aria-label="Main navigation"
           className="order-3 flex w-full items-center gap-6 overflow-x-auto text-sm font-bold text-muted md:order-none md:w-auto"
         >
-          <a className="whitespace-nowrap hover:text-text" href="#featured">
+          <Link className="whitespace-nowrap hover:text-text" to="/store">
             Deals
-          </a>
-          <a className="whitespace-nowrap hover:text-text" href="#featured">
+          </Link>
+          <Link className="whitespace-nowrap hover:text-text" to="/store">
             Games
-          </a>
-          <a className="whitespace-nowrap hover:text-text" href="#categories">
+          </Link>
+          <a className="whitespace-nowrap hover:text-text" href="/#categories">
             Categories
           </a>
         </nav>

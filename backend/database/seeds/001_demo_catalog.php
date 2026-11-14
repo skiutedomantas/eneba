@@ -28,6 +28,17 @@ INSERT IGNORE INTO products (slug, name, description, status) VALUES
     ('wildwood-trail', 'Wildwood Trail', 'Discover a changing forest in this fictional exploration game.', 'active')
 SQL,
     <<<'SQL'
+UPDATE products
+SET image_url = CASE slug
+    WHEN 'starlight-odyssey' THEN '/images/starlight-odyssey.svg'
+    WHEN 'iron-harbor' THEN '/images/iron-harbor.svg'
+    WHEN 'wildwood-trail' THEN '/images/wildwood-trail.svg'
+    ELSE image_url
+END
+WHERE slug IN ('starlight-odyssey', 'iron-harbor', 'wildwood-trail')
+  AND image_url IS NULL
+SQL,
+    <<<'SQL'
 INSERT IGNORE INTO product_categories (product_id, category_id)
 SELECT products.id, categories.id
 FROM products
@@ -35,6 +46,13 @@ JOIN categories ON (
     (products.slug = 'starlight-odyssey' AND categories.slug = 'role-playing')
     OR (products.slug = 'iron-harbor' AND categories.slug = 'action')
     OR (products.slug = 'wildwood-trail' AND categories.slug = 'adventure')
+)
+SQL,
+    <<<'SQL'
+INSERT INTO hero_banners (title, image_url, target_url, sort_order, status)
+SELECT 'Find your next adventure', '/images/hero-banner.svg', '/store', 1, 'active'
+WHERE NOT EXISTS (
+    SELECT 1 FROM hero_banners WHERE title = 'Find your next adventure'
 )
 SQL,
 ];

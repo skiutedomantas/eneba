@@ -123,3 +123,34 @@ The user approved Phase 2A after requesting that all documentation be read and a
 - Temporary Vite preview returned HTTP 200; the design-token and homepage modules were served successfully.
 - Source verification confirms the requested palette, global zero-radius rule, and responsive grid classes.
 
+## 2026-11-14 — Phase 2B catalog and homepage
+
+### Request and approval
+
+The user approved Phase 2B after requesting a documentation-first proposal and then clarified the required endpoint documentation, truthful empty states, and exclusions. All files in `docs/` were read before implementation.
+
+### Work performed
+
+- Implemented PDO-backed catalog, lookup, and homepage services, with validated and bounded filters, sorting, pagination, and section limits.
+- Added the product listing, category/platform/region lookups, and four independent homepage API endpoints. Documented endpoint parameters, response shapes, ordering, status behavior, and Phase 2B exclusions in `API.md`.
+- Updated repeatable fictional seed data with price-bearing offers, a disabled demo seller required by offer relations, and original banner artwork. No digital keys or completed orders are seeded.
+- Replaced static homepage product previews with independent API resources and per-section loading, retry, error, and empty states.
+- Connected the responsive `/store` catalog filters, sorting, price bounds, and URL-backed pagination to the API.
+- Added original SVG artwork and retained the approved palette and responsive 5/3/2 product grid.
+- Added database-backed catalog and homepage endpoint tests and documented their invocation.
+
+### Validation
+
+- `php backend/tests/catalog_endpoints.php` passed, including validation, filters, sorting, pagination, lookup data, and truthful empty states.
+- PHP syntax checks passed for all backend files.
+- Frontend production build and Oxlint passed; `npm audit` reported zero vulnerabilities.
+- Seed and migration reruns completed successfully. Database checks confirmed three active offers, one active banner, zero available digital keys, and zero paid orders.
+- HTTP smoke checks covered catalog filters/pagination, invalid query handling, all lookup and homepage endpoints, and the Vite API proxy.
+- `git diff --check` passed.
+
+### Scope notes
+
+- Authentication, global search, product detail, cart, checkout, orders, and digital-key delivery remain unimplemented.
+- Best sellers, popular categories, and in-stock special deals are empty until qualifying paid sales or available key inventory exists.
+- The temporary Vite smoke-test server was stopped; the pre-existing PHP server was left running.
+

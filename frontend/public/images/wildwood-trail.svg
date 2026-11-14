@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 600" role="img" aria-labelledby="title">
+  <title id="title">Wildwood Trail abstract game artwork</title>
+  <defs>
+    <linearGradient id="forest" x1="0" y1="0" x2="0.8" y2="1">
+      <stop stop-color="#143D50"/>
+      <stop offset=".58" stop-color="#286E68"/>
+      <stop offset="1" stop-color="#1F0A4D"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#forest)" d="M0 0h480v600H0z"/>
+  <circle cx="334" cy="176" r="78" fill="#83E916" opacity=".86"/>
+  <path fill="#1F0A4D" d="m0 356 89-137 89 137zM106 354l101-196 101 196zM276 360l91-158 91 158z"/>
+  <path fill="#311178" d="m-20 440 124-180 124 180zM174 452l128-208 128 208zM342 446l88-136 88 136z"/>
+  <path fill="#4518AC" d="M0 448h480v152H0z"/>
+  <path fill="none" stroke="#E66A8C" stroke-width="5" d="M239 600c-5-70 48-86 12-143-21-33-13-60 20-91"/>
+  <path fill="#fff" d="m92 108 4 12 12 4-12 4-4 12-4-12-12-4 12-4zM178 83l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/>
+</svg>

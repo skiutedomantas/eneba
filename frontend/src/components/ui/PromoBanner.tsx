@@ -1,4 +1,10 @@
-function PromoBanner() {
+interface PromoBannerProps {
+  title: string
+  imageUrl: string
+  targetUrl: string
+}
+
+function PromoBanner({ title, imageUrl, targetUrl }: PromoBannerProps) {
   return (
     <section
       aria-labelledby="promo-heading"
@@ -13,9 +19,7 @@ function PromoBanner() {
           className="mt-4 max-w-3xl text-4xl font-black leading-[1.02] tracking-tight text-text sm:text-5xl lg:text-6xl"
           id="promo-heading"
         >
-          Big worlds.
-          <br />
-          Better prices.
+          {title}
         </h1>
         <p
           className="mt-5 max-w-xl text-base leading-7 text-muted"
@@ -26,23 +30,19 @@ function PromoBanner() {
         </p>
         <a
           className="mt-7 border border-savings bg-savings px-5 py-3 text-sm font-black text-card hover:bg-transparent hover:text-savings focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-savings"
-          href="#featured"
+          href={targetUrl}
         >
-          Explore featured games
+          Explore now
         </a>
       </div>
       <div
-        aria-hidden="true"
         className="relative hidden min-h-64 border-l border-outline bg-card md:block"
       >
-        <div className="absolute inset-0 bg-[linear-gradient(135deg,transparent_0_38%,rgba(131,233,22,0.85)_38%_39%,transparent_39%),linear-gradient(45deg,transparent_0_61%,rgba(230,106,140,0.85)_61%_62%,transparent_62%)]" />
-        <div className="absolute inset-8 border border-outline" />
-        <div className="absolute bottom-8 left-8 border border-outline bg-background px-5 py-4">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-text">
-            The weekly selection
-          </p>
-          <p className="mt-2 text-3xl font-black text-savings">PLAY MORE</p>
-        </div>
+        <img
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          src={imageUrl}
+        />
       </div>
     </section>
   )

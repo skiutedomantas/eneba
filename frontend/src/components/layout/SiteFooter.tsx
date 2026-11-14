@@ -12,10 +12,10 @@ function SiteFooter() {
           </p>
         </div>
         <nav aria-label="Footer navigation" className="flex flex-wrap gap-5 text-sm text-muted">
-          <a className="hover:text-text" href="#featured">
+          <a className="hover:text-text" href="/#featured">
             Featured
           </a>
-          <a className="hover:text-text" href="#categories">
+          <a className="hover:text-text" href="/#categories">
             Categories
           </a>
           <a className="hover:text-text" href="/api/v1/health">

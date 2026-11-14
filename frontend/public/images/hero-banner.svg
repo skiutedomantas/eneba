@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 480" role="img" aria-labelledby="title description">
+  <title id="title">Abstract purple game marketplace banner</title>
+  <desc id="description">Geometric violet shapes with lime and pink accents.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#311178"/>
+      <stop offset="0.58" stop-color="#4518AC"/>
+      <stop offset="1" stop-color="#1F0A4D"/>
+    </linearGradient>
+    <linearGradient id="ribbon" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#83E916"/>
+      <stop offset="1" stop-color="#E66A8C"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#background)" d="M0 0h1200v480H0z"/>
+  <path fill="none" stroke="#fff" stroke-opacity=".18" stroke-width="2" d="m640-80 420 640M790-80l420 640M940-80l420 640M1090-80l420 640M490-80l420 640"/>
+  <path fill="url(#ribbon)" d="m855 0 170 0-270 480H585z" opacity=".9"/>
+  <path fill="#1F0A4D" d="m1015 0 185 0v480H750z" opacity=".84"/>
+  <path fill="none" stroke="#fff" stroke-opacity=".62" stroke-width="2" d="M705 74h355v322H705z"/>
+  <path fill="#83E916" d="m760 135 118 0-59 102z"/>
+  <path fill="#E66A8C" d="m922 135 118 0-59 102z"/>
+  <path fill="none" stroke="#fff" stroke-width="2" d="M760 286h280M760 316h210M760 346h240"/>
+</svg>

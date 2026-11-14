@@ -37,9 +37,12 @@ Build a thin vertical slice early, then extend it with tested business flows. Ke
 
 ### 2B — Catalog and homepage
 
-- Implement product/category/platform/region repositories and catalog filter/sort/pagination endpoints.
-- Implement the four independent homepage endpoints and independent frontend loading/error states.
+- Implement PDO repositories/services for products, categories, platforms, regions, hero banners, sales summaries, and eligible special deals.
+- Implement `GET /products`, `GET /categories`, `GET /platforms`, `GET /regions`, and the four independent homepage endpoints. Document every implemented endpoint and response format in `docs/API.md`.
+- Connect catalog filter, sort, price range, and pagination controls to the API; keep each homepage section's loading, error, retry, and empty states independent.
 - Build the responsive homepage and catalog using the shared components: large rectangular promotional banners, clearly separated sections, and dense dark product cards with artwork, prices, discounts, and region labels.
+- Seed fictional products, a disabled demo seller, price-bearing offers without digital keys, and an original banner asset. Do not seed completed orders or pretend inventory exists; best sellers, popular categories, and in-stock special deals stay empty until their qualifying data exists.
+- Keep authentication, checkout, orders, and digital-key delivery out of this phase.
 - Add request validation and focused API tests for filters, paging, empty states, and inactive records.
 
 **Exit:** homepage sections are served independently from the backend; catalog filters are server-enforced; homepage and catalog use the approved design system and responsive 5/3/2-column grids.
