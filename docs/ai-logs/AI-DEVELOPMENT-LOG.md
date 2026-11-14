@@ -81,3 +81,24 @@ The user approved Phase 1 and npm after reviewing the proposed sequence. The use
 - No real users, offers, or digital keys were seeded.
 - The local API and Vite smoke-test servers were temporary.
 
+## 2026-11-14 — Load root environment file
+
+### Request
+
+The user reported that `/api/v1/health` returned an internal server error and requested a Composer-free root `.env` loader that supports blank assignments, surrounding whitespace, and quoted values.
+
+### Changes
+
+- Added a small environment-file parser and invoked it from the shared backend bootstrap, so HTTP requests and CLI migration/seed commands use the same configuration.
+- Load only the repository-root `.env`; a missing file is allowed when the process environment is configured.
+- Support blank values, `export KEY=VALUE`, single/double-quoted values, and trimmed whitespace. Preserve process environment values (including explicitly blank ones) over `.env`; do not execute PHP, expand variables, or interpret inline comments.
+- Added explicit `503` handling for absent database configuration in the health endpoint and documented `.env` behavior in the root README.
+
+### Validation
+
+- Reproduced the reported `500` before the change.
+- Unit-style parser checks passed for blank, trimmed, quoted, `=`-containing, exported, and process-overridden values.
+- PHP syntax checks passed; bootstrap reports all database variable names as set without printing values.
+- The running API health endpoint now returns `200` with database status `ok`.
+- Frontend build and lint remain passing.
+

@@ -7,8 +7,6 @@ use App\Support\JsonResponse;
 $requestId = bin2hex(random_bytes(16));
 header('X-Request-Id: ' . $requestId);
 
-require dirname(__DIR__) . '/bootstrap.php';
-
 set_exception_handler(static function (\Throwable $exception) use ($requestId): void {
     error_log(json_encode([
         'requestId' => $requestId,
@@ -24,5 +22,7 @@ set_exception_handler(static function (\Throwable $exception) use ($requestId): 
         ],
     ]);
 });
+
+require dirname(__DIR__) . '/bootstrap.php';
 
 require dirname(__DIR__) . '/routes/api.php';

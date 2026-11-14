@@ -24,6 +24,20 @@ if ($method === 'GET' && $path === '/api/v1/health') {
                 'requestId' => $requestId,
             ],
         ]);
+    } catch (\RuntimeException $exception) {
+        error_log(json_encode([
+            'requestId' => $requestId,
+            'exception' => $exception::class,
+            'message' => $exception->getMessage(),
+        ], JSON_UNESCAPED_SLASHES));
+
+        JsonResponse::send(503, [
+            'error' => [
+                'code' => 'DATABASE_CONFIGURATION_ERROR',
+                'message' => 'The database is not configured.',
+                'requestId' => $requestId,
+            ],
+        ]);
     }
 
     JsonResponse::send(200, [
