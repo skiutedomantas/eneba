@@ -57,7 +57,9 @@ Keep the API stateless at the HTTP-request level, but use an opaque server-side 
 │   ├── index.html
 │   ├── src/
 │   │   ├── app/                      # router, providers, app shell
-│   │   ├── components/               # shared UI, cards, forms, feedback
+│   │   ├── components/
+│   │   │   ├── layout/               # header, navigation, page sections, footer
+│   │   │   └── ui/                   # buttons, fields, cards, badges, feedback
 │   │   ├── features/
 │   │   │   ├── auth/
 │   │   │   ├── cart/
@@ -70,6 +72,9 @@ Keep the API stateless at the HTTP-request level, but use an opaque server-side 
 │   │   ├── hooks/
 │   │   ├── lib/                      # API client, formatting, shared utilities
 │   │   ├── pages/
+│   │   ├── styles/
+│   │   │   ├── tokens.css            # semantic visual tokens
+│   │   │   └── global.css            # global defaults and resets
 │   │   ├── types/                    # shared API/domain response types
 │   │   └── main.tsx
 │   └── public/
@@ -98,6 +103,25 @@ Keep the API stateless at the HTTP-request level, but use an opaque server-side 
 
 The structure is intentionally conventional and feature-oriented. It separates presentation, transport, business rules, and persistence without introducing extra services or a framework decision before approval.
 
+## Design system
+
+Phase 2 will establish and apply a consistent GameHub visual system using the palette and direction supplied by the user. These are semantic tokens, implemented as CSS custom properties and mapped to Tailwind utilities:
+
+| Token | Value | Use |
+|---|---|---|
+| `--color-background` | `#4518AC` | Main page background |
+| `--color-section` | `#311178` | Large content sections and navigation surfaces |
+| `--color-card` | `#1F0A4D` | Product cards and footer |
+| `--color-text` | `#FFFFFF` | Primary text |
+| `--color-savings` | `#83E916` | Savings/discount text and indicators |
+| `--color-region` | `#E66A8C` | Region labels |
+
+Use sharp rectangular geometry throughout: zero border radius on cards, buttons, inputs, section containers, labels, and banners. Use borders, spacing, and tonal surfaces to express hierarchy rather than rounded shapes. Keep text readable on each surface; use the savings and region colors as foreground indicators on dark purple surfaces rather than pairing them with low-contrast white text.
+
+The shared shell has prominent navigation and search. Homepage promotions use large rectangular banners; homepage sections are visually distinct rectangular surfaces. Product cards use dark surfaces and consistently place game artwork, title, current price, optional compare-at price/discount, and region label. The catalog and homepage product grids use five columns on desktop, three on tablet, and two on mobile. Define and reuse the responsive breakpoints rather than setting per-page grid counts independently.
+
+Reusable React components should own consistent styling and behavior: site header/navigation, search bar, promotional banner, section container, product grid/card, price and discount display, region label, catalog filters/sort controls, seller offer row, footer, and common loading/empty/error states. Feature pages compose these components instead of restyling them individually. Use original GameHub identity, copy, and licensed or original artwork; the palette and common marketplace patterns do not require copying Eneba's brand assets or exact page composition.
+
 ## Runtime and configuration
 
 - Serve the built SPA and `/api/v1` through HTTPS on the same origin. In development, use Vite's proxy to forward API requests to PHP.
@@ -122,4 +146,5 @@ Use consistent HTTP status codes and a JSON error envelope (see `API.md`). Valid
 | Database-backed key inventory with application-layer encryption | Keeps inventory and orders transactionally consistent while limiting the value of a database-only leak. |
 | Search on MySQL plus a bounded typo-tolerant fallback | Meets the current scale and avoids requiring a separate search service prematurely. |
 | No real payment integration in this design | The requested checkout is simulated; payment processing requires separate security, compliance, and product decisions. |
+| Semantic design tokens and shared React components | Keeps the specified color palette and sharp geometry consistent across responsive pages and makes later visual changes local. |
 

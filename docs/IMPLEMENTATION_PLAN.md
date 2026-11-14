@@ -21,14 +21,28 @@ Build a thin vertical slice early, then extend it with tested business flows. Ke
 
 **Exit:** repeatable local setup and migrations; no secrets committed.
 
-## Phase 2 — Catalog and homepage
+## Phase 2 — Design system, catalog, and homepage
+
+### 2A — Establish the design system
+
+- Add semantic CSS custom properties and Tailwind mappings for the approved palette: background `#4518AC`, sections `#311178`, cards/footer `#1F0A4D`, text `#FFFFFF`, savings `#83E916`, and region labels `#E66A8C`.
+- Apply square geometry globally: zero border radius for page sections, cards, controls, badges, banners, and footer elements.
+- Define shared type, spacing, border, surface, and focus styles alongside the supplied palette so pages do not invent isolated visual values.
+- Establish responsive grid breakpoints with two columns on mobile, three on tablet, and five on desktop.
+- Implement reusable layout and UI components: prominent navigation/search, rectangular promo banner, section container, product card/grid, price and discount display, region label, catalog controls, seller offer row, footer, and loading/empty/error states.
+- Design blueprints for the remaining store flows (search, product detail, authentication, cart, checkout, confirmation, and order history) so they can use the same tokens and shell in their later implementation phases.
+- Check text and focus contrast on each surface; use lime and pink as indicators on dark purple surfaces where needed for readability.
+
+**Exit:** the token layer and shared components implement the supplied visual direction; the reusable product grid is verified at representative mobile, tablet, and desktop viewport widths.
+
+### 2B — Catalog and homepage
 
 - Implement product/category/platform/region repositories and catalog filter/sort/pagination endpoints.
 - Implement the four independent homepage endpoints and independent frontend loading/error states.
-- Build shared product cards, offer/price display, responsive home sections, and catalog pages.
+- Build the responsive homepage and catalog using the shared components: large rectangular promotional banners, clearly separated sections, and dense dark product cards with artwork, prices, discounts, and region labels.
 - Add request validation and focused API tests for filters, paging, empty states, and inactive records.
 
-**Exit:** homepage sections are served independently from the backend; catalog filters are server-enforced.
+**Exit:** homepage sections are served independently from the backend; catalog filters are server-enforced; homepage and catalog use the approved design system and responsive 5/3/2-column grids.
 
 ## Phase 3 — Search and product comparison
 
@@ -84,4 +98,6 @@ Build a thin vertical slice early, then extend it with tested business flows. Ke
 - Key endpoints do not reveal content before paid status and do not cache it.
 - Home sections load independently; a failure in one does not hide the others.
 - Search fuzzy matching is bounded, measurable, and does not degrade ordinary catalog browsing.
+- The specified palette and zero-radius geometry are applied consistently through reusable components.
+- Homepage and catalog grids render two columns on mobile, three on tablet, and five on desktop.
 
