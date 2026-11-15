@@ -3,7 +3,7 @@
 ## Conventions
 
 - Base path: `/api/v1`; all endpoints return JSON.
-- Browser calls use same-origin HTTPS. Authenticated endpoints (implemented in a later phase) use an `HttpOnly` session cookie.
+- Browser calls use same-origin HTTPS. Authenticated endpoints use an `HttpOnly` server-side session cookie and state-changing requests require a CSRF token.
 - Money uses `{ "amountMinor": 1299, "currency": "EUR" }`.
 - Paginated lists use `{ "data": [...], "meta": { "page": 1, "perPage": 24, "total": 42 } }`. Bounded section and lookup lists use `{ "data": [...], "meta": { "limit": 8 } }`.
 - Errors use `{ "error": { "code": "VALIDATION_ERROR", "message": "...", "fields": {} , "requestId": "..." } }`. Omit `fields` when inapplicable. Never return SQL, stack traces, secrets, or key ciphertext.
@@ -11,11 +11,11 @@
 - Apply bounded pagination and allowlisted sort fields/directions. Never interpolate unchecked request values into SQL.
 - State-changing requests require CSRF validation. Do not enable permissive CORS.
 
-## Implemented scope through Phase 3
+## Implemented scope through Phase 4
 
-Phases 2B and 3 implement the health check, product catalog and reference-data lookups, four independent homepage endpoints, product search, and product detail with seller-offer comparison. Authentication, registration, login/logout, cart, checkout, orders, and digital-key delivery remain future-phase contracts.
+Phases 2B and 3 implement the health check, product catalog and reference-data lookups, four independent homepage endpoints, product search, and product detail with seller-offer comparison. Phase 4 adds customer registration, login/logout, session-backed identity, and a guest/account cart. Checkout, orders, and digital-key delivery remain future-phase contracts.
 
-An empty result is a successful response (`200`) with `"data": []`. The API does not invent sales or inventory to populate a section. The current seed contains 30 active games and 61 active seller offers, with two or three offers per game. It creates no completed orders or digital keys, so best sellers and popular categories remain empty and special deals remain key-inventory-gated.
+An empty result is a successful response (`200`) with `"data": []`. The frontend receives all homepage section data from these independent backend endpoints; it does not embed product, deal, or category lists. The repeatable seeds create 30 active games, 61 active seller offers, recent simulated paid-order activity for sales-based rankings, and discounted offers for the deals section. No digital keys are seeded.
 
 Products span 11 categories. Offers use five seller profiles, EUR prices, compare-at prices, PC/PlayStation 5/Xbox Series X|S, and Global/Europe/United States regions. The catalog and product comparison pages do not display inventory status labels; the API still reports key availability for backend flows. Game cover references are deferred, so seeded products currently return `imageUrl: null`.
 
@@ -41,15 +41,21 @@ Database configuration or availability errors return `503` with the standard err
 
 ## Authentication
 
-Reserved for the authentication phase; not implemented through Phase 3.
-
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/auth/register` | Create customer account; validate unique email and password policy. |
-| `POST` | `/auth/login` | Verify password, rotate session identifier, create server-side session. |
-| `POST` | `/auth/logout` | Revoke current session and expire cookie. |
+| `GET` | `/auth/csrf` | Issue/refresh a CSRF token, bound to the current session when signed in. |
+| `POST` | `/auth/register` | Create a customer account and authenticated session. |
+| `POST` | `/auth/login` | Verify credentials, rotate the prior session, and create a server-side session. |
+| `POST` | `/auth/logout` | Revoke the current session and expire session/CSRF cookies. |
 | `GET` | `/auth/me` | Return current user or `401`. |
-| `GET` | `/auth/csrf` | Issue/refresh a CSRF token bound to the current session; login/register bootstrap must be protected against login CSRF as well. |
+
+Authentication endpoints use same-origin cookies named `gamehub_session` and `gamehub_csrf`, scoped to `/api/v1`, `SameSite=Lax`, and `HttpOnly`. The session cookie is Secure on HTTPS/production, with `SESSION_COOKIE_SECURE` available for deployment configuration. Session tokens are 256-bit random values; only their SHA-256 hashes are stored. Sessions expire after 14 days. The CSRF endpoint returns a token in JSON for the frontend to keep in memory; mutating requests must send the same token in `X-CSRF-Token` and the CSRF cookie. For signed-in sessions it is also checked against the session's stored CSRF-token hash. Login and registration use the anonymous double-submit token too.
+
+Registration accepts `{ "email": "...", "password": "...", "displayName": "..." }`. Email addresses are normalized to lowercase, display names must be 2–80 bytes, and passwords must be 12–72 bytes. Login accepts `{ "email": "...", "password": "..." }`. Successful responses return `{ "data": { "user": { "id": 1, "email": "...", "displayName": "..." }, "csrfToken": "..." } }`; registration returns `201`, login `200`. The CSRF bootstrap response is `{ "data": { "csrfToken": "..." } }`; `/auth/me` returns `{ "data": { "user": ... } }`. Authentication attempts are rate-limited per hashed client IP: 10 login attempts per 15 minutes and 5 registrations per hour. `409 EMAIL_ALREADY_REGISTERED`, `401 INVALID_CREDENTIALS`, `403 CSRF_VALIDATION_FAILED`, and `429 RATE_LIMITED` are explicit errors.
+
+If a guest cart exists, successful registration/login merges it into the new/current account cart in the same transaction. Matching offer quantities are combined; if a combined quantity would exceed 99, the operation returns `409 CART_MERGE_CONFLICT` without losing the guest cart or replacing an existing session. After a successful merge the guest cart is deleted and its cookie is expired.
+
+The SPA does not protect the cart route: guest and authenticated users can view and edit their respective carts. Checkout is the point at which authentication is required. Any frontend guard is only a navigation convenience; the checkout API must independently resolve and authorize the session.
 
 ## Homepage
 
@@ -59,7 +65,7 @@ Each section has an independent endpoint and can be requested, failed, and refre
 |---|---|---|
 | `GET` | `/home/hero-banners` | Active banners ordered by `sort_order`. |
 | `GET` | `/home/best-sellers` | Products ranked by completed units sold in the last 30 days. |
-| `GET` | `/home/special-deals` | Active, in-window offers with available inventory and `compare_at_price_minor > price_minor`, ordered by discount percentage descending. |
+| `GET` | `/home/special-deals` | Active, in-window offers with `compare_at_price_minor > price_minor`, ordered by discount percentage descending. |
 | `GET` | `/home/popular-categories` | Categories ranked by completed units sold in the last 30 days. |
 
 Each accepts optional `limit` (integer, range `1..20`; default `3` for hero banners and `8` for other sections). Each endpoint has its own response and frontend loading/error state.
@@ -137,7 +143,7 @@ The following response snippets show the response shape; example IDs, amounts, s
 }
 ```
 
-`discountPercent` is calculated by the API from integer minor-unit values as a whole percentage; the client does not supply it. Only offers with inventory greater than zero qualify for this endpoint.
+`discountPercent` is calculated by the API from integer minor-unit values as a whole percentage; the client does not supply it. Deals do not require seeded key inventory, so the endpoint can return an eligible price promotion with `availableQuantity: 0`. The quantity remains the actual count of available keys and must be checked independently before any purchase.
 
 `GET /home/popular-categories` response:
 
@@ -150,7 +156,7 @@ The following response snippets show the response shape; example IDs, amounts, s
 }
 ```
 
-For best sellers and popular categories, only orders with `status="paid"` and `paid_at` within the rolling 30-day period count. With no matching paid sales the endpoint returns `{"data":[],"meta":{"limit":8}}`.
+For best sellers and popular categories, only orders with `status="paid"` and `paid_at` within the rolling 30-day period count. The current repeatable seed inserts simulated paid-order activity for its internal disabled account, so these sections have data on a fresh setup. If there are no qualifying orders, the endpoint returns `{"data":[],"meta":{"limit":8}}`.
 
 ## Catalog, search, product
 
@@ -213,7 +219,7 @@ Lookup endpoints accept no query parameters and return active options. Categorie
 
 The three examples correspond to `/categories`, `/platforms`, and `/regions`, respectively.
 
-`compareAtPriceMinor` is null when the offer has no advertised comparison price. The API calculates any displayed discount from the compare-at and current prices, in the offer's currency; it must not trust a client-supplied percentage. An offer is eligible for the special-deals section only when the compare-at price is greater than the current price and the offer is active, in its deal window, and has available inventory.
+`compareAtPriceMinor` is null when the offer has no advertised comparison price. The API calculates any displayed discount from the compare-at and current prices, in the offer's currency; it must not trust a client-supplied percentage. An offer is eligible for the special-deals section only when the compare-at price is greater than the current price and the offer is active and in its deal window. Eligibility does not imply available key inventory; the response carries the actual inventory count separately.
 
 `GET /search` accepts:
 
@@ -311,21 +317,54 @@ This hybrid is practical without another service at early scale. If catalog size
 
 ## Cart and checkout
 
-Reserved for Phase 4; not implemented through Phase 3.
-
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/cart` | Return current user's cart with current offer data, stock, and recalculated totals. |
+| `GET` | `/cart` | Return the current account or guest cart with current offer data and recalculated totals. |
 | `POST` | `/cart/items` | Add an offer and quantity; body `{ "offerId": 123, "quantity": 1 }`. |
-| `PATCH` | `/cart/items/{id}` | Change quantity; validate positive bounded quantity. |
-| `DELETE` | `/cart/items/{id}` | Remove an item. |
+| `PATCH` | `/cart/items/{id}` | Set a cart item's quantity. |
+| `DELETE` | `/cart/items/{id}` | Remove an item, including one whose offer is no longer available. |
 | `POST` | `/checkout` | Authenticated simulated checkout. Accept an idempotency key; server revalidates prices/currency and locks inventory. |
+
+Cart endpoints support both guests and authenticated users; mutations require CSRF validation. `GET /cart` returns the current account cart when signed in, otherwise the guest cart associated with the guest cookie (or an empty cart if none exists). The `gamehub_guest_cart` cookie is a 256-bit random, HttpOnly, SameSite=Lax token scoped to `/api/v1`; only its SHA-256 hash is stored. The cookie expires after 14 days. Guest cart contents are server-backed, so current offer details and prices are still read from the database.
+
+The cart stores the selected `offerId`, not a client-provided price. Adding the same offer again increments its quantity. Quantities must be integers from 1 to 99. The server validates that the offer, product, platform, and region are active and the seller is approved for add/update. A missing offer returns `404 OFFER_NOT_FOUND`; an inactive/unavailable offer returns `409 OFFER_UNAVAILABLE`; invalid fields or quantities return `422 VALIDATION_ERROR`. `POST` returns `201`; `PATCH` and `DELETE` return `200`. Successful mutations return the updated cart in the same envelope as `GET /cart`.
+
+Cart editing does not depend on digital-key inventory. Guests and signed-in users can add any active catalog offer even when its reported `availableQuantity` is zero, and add/update never queries key rows. Inventory is authoritative at checkout only. Each cart read joins the current database offer and recalculates line totals and per-currency subtotals from its current `price_minor`. If an offer becomes unavailable while in the cart, the item remains visible with `offerAvailable: false`, null price/total/currency, and an explanation; it can be removed, but cannot be updated or purchased until removed or made active again.
+
+`GET /cart` response:
+
+```json
+{
+  "data": {
+    "items": [
+      {
+        "id": 17,
+        "offerId": 42,
+        "product": { "slug": "example-game", "name": "Example Game" },
+        "seller": { "name": "Pixel Vault" },
+        "platform": { "name": "PC" },
+        "region": { "name": "Global" },
+        "quantity": 2,
+        "offerAvailable": true,
+        "unavailableReason": null,
+        "unitPriceMinor": 1899,
+        "lineTotalMinor": 3798,
+        "currency": "EUR"
+      }
+    ],
+    "totals": [{ "currency": "EUR", "subtotalMinor": 3798 }],
+    "itemCount": 2
+  }
+}
+```
+
+`itemCount` includes all cart quantities, including unavailable lines. Unavailable lines are excluded from payable subtotals. Multiple currencies are returned as separate totals rather than combined.
 
 Checkout response on success: `201` with order ID, status, currency, totals, and purchase item summaries. It must not include plaintext keys in the initial response; users retrieve delivery through the order endpoint after the order is committed as paid.
 
 ## Orders and key delivery
 
-Reserved for Phase 5; not implemented through Phase 3.
+Reserved for Phase 5; not implemented through Phase 4.
 
 | Method | Path | Purpose |
 |---|---|---|

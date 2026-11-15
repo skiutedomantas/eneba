@@ -4,7 +4,9 @@ import { SiteFooter } from '../components/layout/SiteFooter'
 import { SiteHeader } from '../components/layout/SiteHeader'
 import { ResourceFeedback } from '../components/ui/ResourceFeedback'
 import { SectionPanel } from '../components/ui/SectionPanel'
+import { useAuth } from '../contexts/useAuth'
 import { useApiResource } from '../hooks/useApiResource'
+import { ApiError } from '../lib/api/client'
 import { getProductDetail } from '../lib/api/catalog'
 
 function formatPrice(amountMinor: number, currency: string): string {
@@ -16,7 +18,10 @@ function formatPrice(amountMinor: number, currency: string): string {
 
 function ProductDetailPage() {
   const { slug } = useParams()
+  const { addToCart, loading: authLoading } = useAuth()
   const [selectedOfferId, setSelectedOfferId] = useState<number | null>(null)
+  const [cartMessage, setCartMessage] = useState<string | null>(null)
+  const [addingToCart, setAddingToCart] = useState(false)
   const productResource = useApiResource(
     `product:${slug ?? ''}`,
     (signal) => getProductDetail(slug ?? '', signal),
@@ -30,6 +35,24 @@ function ProductDetailPage() {
   const selectedOffer =
     result?.offers.find((offer) => offer.offerId === selectedOfferId) ??
     defaultOffer
+
+  async function handleAddToCart(): Promise<void> {
+    if (!selectedOffer) return
+    setAddingToCart(true)
+    setCartMessage(null)
+    try {
+      await addToCart(selectedOffer.offerId)
+      setCartMessage('Added to your cart.')
+    } catch (cause) {
+      setCartMessage(
+        cause instanceof ApiError
+          ? cause.message
+          : 'This offer could not be added. Please try again.',
+      )
+    } finally {
+      setAddingToCart(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background text-text">
@@ -88,6 +111,19 @@ function ProductDetailPage() {
                     <p className="mt-3 text-2xl font-black">
                       {formatPrice(selectedOffer.priceMinor, selectedOffer.currency)}
                     </p>
+                    <button
+                      className="mt-4 w-full border border-savings bg-savings px-4 py-3 font-black text-background hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={addingToCart || authLoading}
+                      onClick={() => void handleAddToCart()}
+                      type="button"
+                    >
+                      {addingToCart ? 'Adding...' : 'Add to cart'}
+                    </button>
+                    {cartMessage ? (
+                      <p className="mt-3 text-sm text-savings" role="status">
+                        {cartMessage}
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
               </div>

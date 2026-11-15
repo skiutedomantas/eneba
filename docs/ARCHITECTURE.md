@@ -22,7 +22,7 @@ Browser
               | same-origin HTTPS /api/v1
               v
   PHP REST API
-    routing/controllers -> validation/auth -> application services
+    routing/controllers -> validation/session auth -> application services
                                             -> repositories (PDO)
                                                    |
                                                    v
@@ -37,7 +37,7 @@ Use explicit boundaries:
 - **Services** implement use cases and transaction boundaries (checkout, search, home sections).
 - **Repositories** perform parameterized PDO reads and writes.
 - **Validators/DTOs** normalize and validate request/response data.
-- **Middleware** resolves sessions, enforces CSRF on state-changing requests, and applies authorization.
+- **Session/auth handling** resolves server-side sessions, enforces CSRF on state-changing requests, and applies authorization.
 - **Frontend API services** own URL construction, typed payloads, and common error handling; components do not issue ad hoc fetch calls.
 
 Keep the API stateless at the HTTP-request level, but use an opaque server-side session for browser identity. Avoid business logic in route files and SQL in React components.
@@ -60,6 +60,7 @@ Keep the API stateless at the HTTP-request level, but use an opaque server-side 
 │   │   ├── components/
 │   │   │   ├── layout/               # header, navigation, page sections, footer
 │   │   │   └── ui/                   # buttons, fields, cards, badges, feedback
+│   │   ├── contexts/                 # authenticated user and cart state
 │   │   ├── features/
 │   │   │   ├── auth/
 │   │   │   ├── cart/
@@ -120,7 +121,7 @@ Use sharp rectangular geometry throughout: zero border radius on cards, buttons,
 
 The shared shell has prominent navigation and search. Homepage promotions use large rectangular banners; homepage sections are visually distinct rectangular surfaces. Product cards use dark surfaces and consistently place game artwork, title, current price, optional compare-at price/discount, and region label. The catalog and homepage product grids use five columns on desktop, three on tablet, and two on mobile. Define and reuse the responsive breakpoints rather than setting per-page grid counts independently.
 
-Reusable React components should own consistent styling and behavior: site header/navigation, search bar, promotional banner, section container, product grid/card, price and discount display, region label, catalog filters/sort controls, seller offer row, footer, and common loading/empty/error states. Feature pages compose these components instead of restyling them individually. Use original GameHub identity, copy, and licensed or original artwork; the palette and common marketplace patterns do not require copying Eneba's brand assets or exact page composition.
+Reusable React components should own consistent styling and behavior: site header/navigation, search bar, promotional banner, section container, responsive product grid/carousel and card, price and discount display, region label, catalog filters/sort controls, seller offer row, footer, and common loading/empty/error states. Feature pages compose these components instead of restyling them individually. Use original GameHub identity, copy, and licensed or original artwork; the palette and common marketplace patterns do not require copying Eneba's brand assets or exact page composition.
 
 ## Runtime and configuration
 
@@ -129,6 +130,14 @@ Reusable React components should own consistent styling and behavior: site heade
 - Return JSON for API responses, use UTC timestamps, and centralize error formatting and request IDs.
 - Add migrations and deterministic seed data before relying on manually edited databases.
 - For production, disable verbose PHP errors in responses and log them server-side with request IDs.
+
+## Authentication and cart
+
+The browser receives an opaque random session token in an `HttpOnly`, `SameSite=Lax` cookie. The API stores only its SHA-256 hash in `sessions`, enforces expiry/revocation on every protected request, and rotates the token after login or registration. A separate CSRF cookie/token is double-submitted in a request header and additionally bound to authenticated sessions by hash. Login and registration also require the bootstrapped anonymous CSRF token. Rate-limit counters use hashed client IPs and fixed windows.
+
+The React auth context loads the current user and cart count. The cart is intentionally available to anonymous visitors as well as signed-in users, so it is not wrapped in an auth guard. Checkout is the point where sign-in is required; that authorization must be enforced by both route UX and the checkout API, with the API as the security boundary.
+
+Anonymous carts are server-backed and keyed by a random HttpOnly guest cookie whose SHA-256 hash is stored in the database. Cart entries store only `cart_id`, selected `offer_id`, and quantity. Cart add/update validate current offer eligibility but do not consult digital-key inventory. Every cart read joins current offer data and recalculates totals from its current price; an offer that becomes inactive stays visible as unpriced and removable. On sign-in/registration, merge guest entries into the account cart transactionally and clear the guest cookie. Checkout in the next phase remains the authoritative authentication and inventory check and must lock and assign real keys transactionally.
 
 ## Error and observability conventions
 
@@ -143,6 +152,9 @@ Use consistent HTTP status codes and a JSON error envelope (see `API.md`). Valid
 | Service/repository separation | Keeps transaction-heavy checkout and independently maintained homepage queries testable. |
 | Integer minor-unit prices plus currency code | Avoids floating-point rounding errors; currency is explicit. |
 | Opaque server-side sessions | Supports logout/revocation and avoids long-lived browser bearer tokens. |
+| CSRF token bound to the session | Prevents cross-site state changes while keeping the session token inaccessible to browser JavaScript. |
+| Cart references offers, not client prices | Allows price comparison and fresh totals on every read without trusting browser-submitted amounts. |
+| Cart editing independent of key inventory | Keeps active demo offers usable without inventing key stock; checkout remains the stock authority. |
 | Database-backed key inventory with application-layer encryption | Keeps inventory and orders transactionally consistent while limiting the value of a database-only leak. |
 | Search on MySQL plus a bounded typo-tolerant fallback | Meets the current scale and avoids requiring a separate search service prematurely. |
 | No real payment integration in this design | The requested checkout is simulated; payment processing requires separate security, compliance, and product decisions. |

@@ -237,3 +237,83 @@ The user requested two or three offers for every active game, preservation of th
 - No digital-key records were added. Availability remains derived from key inventory in the backend; the frontend does not show availability labels.
 - Cover references remain deferred until IGDB access is available.
 
+## 2026-11-15 — Populate homepage sections
+
+### Request
+
+The user reported empty best-seller, special-deal, and popular-category sections and asked to simulate content while keeping every section backend-driven. They requested a review of the documentation and a check of frontend fetching and rendering.
+
+### Changes
+
+- Added an idempotent backend seed for recent simulated paid-order activity, which drives the existing database rankings for best sellers and popular categories.
+- Updated special-deal selection to return current active discounted offers even when no keys are seeded. The API continues to return the actual available-key count; it does not create fake inventory.
+- Confirmed each homepage section uses its own frontend API request and independent loading, error, retry, and empty states.
+- Updated API, database, and implementation-plan documentation and changed empty-state copy to reflect the current backend criteria.
+
+### Validation
+
+- Ran the seed twice and confirmed all four homepage endpoints return data: one banner and eight items each for best sellers, special deals, and popular categories.
+- Verified the SPA and all four API requests through the Vite proxy.
+- Backend catalog/homepage and search/product tests, PHP syntax checks, frontend build/lint, and `git diff --check` passed.
+
+## 2026-11-15 — Homepage product carousels
+
+### Request
+
+The user asked for best sellers and special deals to use responsive carousels on desktop, tablet, and mobile.
+
+### Changes
+
+- Added a reusable product carousel using the existing product cards, horizontal touch scrolling, scroll snapping, previous/next controls, and reduced-motion support.
+- Replaced the best-seller and special-deal grids with carousels. The track shows two cards on mobile, three on tablet, and five on desktop.
+- Updated the architecture and implementation-plan docs to include the responsive carousel component.
+
+### Validation
+
+- Frontend production build and Oxlint passed.
+- Verified the generated CSS includes mobile, tablet, and desktop carousel card widths and mandatory scroll snapping.
+- `git diff --check` passed.
+
+## 2026-11-15 — Authentication and inventory-independent cart
+
+### Request
+
+The user approved Phase 4 with the requirements that all 30 active games be addable through active offers without requiring digital-key inventory, cart prices be read from current server-side offer prices, and inactive offers be clearly handled.
+
+### Changes
+
+- Added session-backed registration, login, logout, and current-user routes with password hashing, opaque hashed session tokens, CSRF validation, rotation/revocation, and hashed-IP rate limits.
+- Added authenticated cart endpoints and persistence that stores the selected offer ID and quantity. Cart add/update checks offer and related-record statuses but never consults key inventory.
+- Recalculate cart line prices and currency subtotals from current offer prices on every read. Inactive cart offers remain visible with no chargeable line total and can be removed.
+- Added account forms, protected cart route, responsive cart page, header account/cart navigation, and add-to-cart controls on product detail pages.
+- Updated architecture, database, API, implementation-plan, and development-log documentation.
+
+### Validation
+
+- Applied the authentication rate-limit migration.
+- Authentication/cart service tests cover session rotation/expiry/logout, CSRF, duplicate registration, rate limiting, cart ownership, current-price recalculation, inactive offers, and quantity bounds.
+- Verified every one of the 30 active catalog products can be added to a cart through an active offer while available key inventory is zero.
+- Existing catalog/homepage and search/product service checks passed.
+- All backend PHP files passed syntax checks; frontend production build/type-check and Oxlint passed.
+- HTTP smoke checks verified CSRF bootstrap, unauthenticated route guards, CSRF rejection, and JSON validation responses without creating accounts.
+
+## 2026-11-15 — Allow guest cart access
+
+### Request
+
+The user clarified that cart browsing and editing must work before sign-in, with authentication checked only when proceeding to checkout. They selected a server-backed guest cart keyed by an anonymous cookie and merged into the account cart at sign-in.
+
+### Changes
+
+- Added a guest-cart cookie with an opaque random token; the database stores only its SHA-256 hash and enforces a single cart owner (account or guest).
+- Made cart reads, add, update, and remove available to guests while retaining CSRF protection and current server-side offer pricing.
+- Product details now allow guest add-to-cart, and the cart route/header remain available while signed out.
+- Successful login/registration transactionally merges guest items into the account cart and expires the guest cookie. Quantity conflicts preserve the guest cart and return a clear conflict instead of discarding selections.
+- Updated the Phase 4 API, database, architecture, and implementation-plan documentation. Checkout remains the authentication boundary for Phase 5.
+
+### Validation
+
+- Applied the guest-cart schema migration.
+- Authentication/cart tests cover anonymous empty carts, zero-inventory guest additions for all 30 products, account merge and quantity combination, merge conflicts, current-price recalculation, and unavailable offers.
+- Backend service, catalog/homepage, and search/product checks passed; PHP syntax checks and frontend build/lint passed.
+

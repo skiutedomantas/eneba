@@ -129,6 +129,12 @@ SQL);
     public function specialDeals(int $limit): array
     {
         $statement = $this->pdo->prepare(<<<'SQL'
+WITH inventory AS (
+    SELECT offer_id, COUNT(*) AS available_quantity
+    FROM digital_keys
+    WHERE status = 'available'
+    GROUP BY offer_id
+)
 SELECT
     offer.id AS offer_id,
     product.id AS product_id,
@@ -142,7 +148,7 @@ SELECT
     platform.name AS platform_name,
     region.code AS region_code,
     region.name AS region_name,
-    COUNT(digital_key.id) AS available_quantity,
+    COALESCE(inventory.available_quantity, 0) AS available_quantity,
     FLOOR(
         (offer.compare_at_price_minor - offer.price_minor)
         * 100.0 / offer.compare_at_price_minor
@@ -156,8 +162,7 @@ JOIN platforms AS platform
   ON platform.id = offer.platform_id AND platform.status = 'active'
 JOIN regions AS region
   ON region.id = offer.region_id AND region.status = 'active'
-JOIN digital_keys AS digital_key
-  ON digital_key.offer_id = offer.id AND digital_key.status = 'available'
+LEFT JOIN inventory ON inventory.offer_id = offer.id
 WHERE offer.status = 'active'
   AND offer.compare_at_price_minor > offer.price_minor
   AND (offer.deal_starts_at IS NULL OR offer.deal_starts_at <= UTC_TIMESTAMP(6))
@@ -174,7 +179,8 @@ GROUP BY
     platform.code,
     platform.name,
     region.code,
-    region.name
+    region.name,
+    inventory.available_quantity
 ORDER BY discount_percent DESC, offer.price_minor ASC, offer.id ASC
 LIMIT :limit
 SQL);

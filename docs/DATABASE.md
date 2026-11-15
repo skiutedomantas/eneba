@@ -18,6 +18,7 @@ The following is a logical schema; migrations should define exact lengths, nulla
 |---|---|---|
 | `users` | `id`, `email` (unique), `password_hash`, `display_name`, `role`, `status`, timestamps | `role` is `customer` or a tightly controlled `admin`; `status` can disable access. |
 | `sessions` | `id`, `user_id`, `token_hash` (unique), `csrf_token_hash`, `expires_at`, `created_at`, `last_seen_at`, `revoked_at` | Store only a hash of the random cookie token. Session rows permit revocation and expiry. |
+| `auth_rate_limits` | `action`, `subject_hash`, `window_started_at`, `attempt_count`, `updated_at` | Per-IP fixed-window login/registration limits; store a hash of the client IP, not the raw address. |
 | `seller_profiles` | `id`, `user_id` (unique), `display_name`, `status`, timestamps | A seller is a user with a seller profile; approval/status is server controlled. |
 
 ### Catalog and offers
@@ -36,8 +37,8 @@ The following is a logical schema; migrations should define exact lengths, nulla
 
 | Table | Important columns | Notes |
 |---|---|---|
-| `carts` | `id`, `user_id` (unique), timestamps | One active cart per user in the MVP. |
-| `cart_items` | `id`, `cart_id`, `offer_id`, `quantity`, timestamps | Unique `(cart_id, offer_id)`; quantity is positive and bounded by available keys at checkout. |
+| `carts` | `id`, `user_id` (nullable unique), `guest_token_hash` (nullable unique), timestamps | Exactly one owner is set: an account or a guest token. Guest identity is stored only as a hash; login merges the guest cart into the account cart. |
+| `cart_items` | `id`, `cart_id`, `offer_id`, `quantity`, timestamps | Unique `(cart_id, offer_id)`; stores the selected offer and quantity, not a price snapshot. Cart add/update do not require key inventory; checkout validates availability and quantity. |
 | `orders` | `id`, `user_id`, `status`, `currency`, `subtotal_minor`, `total_minor`, `idempotency_key`, `created_at`, `paid_at` | Unique `(user_id, idempotency_key)` when an idempotency key is supplied. Simulated payment status is recorded here. |
 | `order_items` | `id`, `order_id`, `offer_id`, `product_name_snapshot`, `seller_name_snapshot`, `platform_name_snapshot`, `region_name_snapshot`, `quantity`, `unit_price_minor`, `currency` | Immutable purchase-time snapshots; offer may later change or be disabled. |
 | `key_access_logs` | `id`, `user_id`, `order_item_id`, `accessed_at`, `request_id` | Audit metadata only. Never store the returned plaintext key in logs. |
@@ -50,9 +51,9 @@ The following is a logical schema; migrations should define exact lengths, nulla
 
 Best sellers, special deals, and popular categories are computed from order/offer data in the MVP rather than duplicated into mutable homepage tables. If editorial curation or query load later warrants it, add a materialized/cache table with an explicit refresh strategy.
 
-An offer qualifies as a special deal only when it is active, within its configured deal window, has available key inventory, and has a non-null `compare_at_price_minor` greater than `price_minor`. Calculate the discount from the two integer amounts in the same currency; do not persist a separate percentage that can become stale. Treat a null comparison price (or one not greater than the selling price) as no advertised discount.
+An offer qualifies as a special deal when it is active, within its configured deal window, and has a non-null `compare_at_price_minor` greater than `price_minor`. Deal merchandising is independent of key inventory so discounted offers can be presented without seeding fake keys; the API still reports the actual available-key count, and checkout must validate inventory separately. Calculate the discount from the two integer amounts in the same currency; do not persist a separate percentage that can become stale. Treat a null comparison price (or one not greater than the selling price) as no advertised discount.
 
-The repeatable catalog seed creates 30 active games across 11 categories and 61 active offers, with two offers per game except for Cyberpunk 2077, which has three. Five seller profiles provide EUR price comparisons using PC, PlayStation 5, Xbox Series X|S, and Global, Europe, and United States regions. The five existing offer rows are retained; the seed adds offers only as needed to provide two or three offers per game, making it safe to rerun against an already populated catalog. It does not create order or digital-key rows. The frontend hides availability labels, while the API and future checkout logic continue to use actual digital-key inventory. The seed aborts rather than repurposing a legacy offer if it has keys, order items, or cart items.
+The repeatable catalog seed creates 30 active games across 11 categories and 61 active offers, with two offers per game except for Cyberpunk 2077, which has three. Five seller profiles provide EUR price comparisons using PC, PlayStation 5, Xbox Series X|S, and Global, Europe, and United States regions. The five existing offer rows are retained; the seed adds offers only as needed to provide two or three offers per game, making it safe to rerun against an already populated catalog. A separate seed adds recent simulated paid-order activity for homepage rankings, but no digital-key rows. The frontend hides availability labels, while the API and future checkout logic continue to use actual digital-key inventory. The seed aborts rather than repurposing a legacy offer if it has keys, order items, or cart items.
 
 `products.image_url` is nullable and already supports external HTTPS references. Game cover references are deferred; products currently have no cover images. The intended source is IGDB's [cover image API](https://api-docs.igdb.com/#images), with visible attribution and rights confirmation before any commercial deployment. No IGDB credentials belong in the repository or runtime application.
 
@@ -68,10 +69,11 @@ MySQL `FULLTEXT` over product name and description provides first-pass relevance
 
 - `users` 1—0..1 `seller_profiles`: customers may also have an approved seller profile.
 - `users` 1—many `sessions`: one user can have multiple devices/sessions; revocation is per session.
+- `auth_rate_limits` uses one row per authentication action and hashed client IP; it is operational state, not an identity relationship.
 - `products` many—many `categories` through `product_categories`.
 - `products`, `seller_profiles`, `platforms`, and `regions` each have a one—many relationship to `offers`.
 - `offers` 1—many `digital_keys`: each key is stock for one specific offer.
-- `users` 1—1 active `carts`; `carts` 1—many `cart_items`; each cart item references one offer.
+- `users` 1—0..1 account `carts`; each guest-token hash 1—0..1 guest `carts`; `carts` 1—many `cart_items`; each cart item references one offer.
 - `users` 1—many `orders`; `orders` 1—many `order_items`; each item references its original offer and stores purchase snapshots.
 - `order_items` 1—many `digital_keys` after purchase (one per purchased unit); each key row's nullable `order_item_id` foreign key can refer to only one order item, while allowing multiple keys for an item with quantity greater than one.
 - `users` and `order_items` 1—many `key_access_logs` rows provide an access audit trail.
@@ -84,7 +86,7 @@ Add indexes for:
 - Unique `users.email`, `products.slug`, category/platform/region codes, `sessions.token_hash`, and seller profile `user_id`.
 - `offers(product_id, status)`, `offers(platform_id, region_id, status, price_minor)`, and `offers(seller_id, status)`.
 - `digital_keys(offer_id, status, id)` for availability/locking and `digital_keys(order_item_id)` for order delivery.
-- `cart_items(cart_id, offer_id)` unique; `orders(user_id, created_at)`; `order_items(order_id)`.
+- Unique `carts.guest_token_hash`; `cart_items(cart_id, offer_id)` unique; `auth_rate_limits(action, subject_hash)` primary key; `orders(user_id, created_at)`; `order_items(order_id)`.
 - `product_categories(category_id, product_id)` and gram lookup `(gram, product_id)`.
 - A MySQL full-text index on active-search fields where supported by the chosen query design.
 
@@ -93,6 +95,10 @@ Use foreign-key deletion rules deliberately: restrict deletes for products/offer
 ## Key inventory and checkout consistency
 
 Available inventory is the count of `digital_keys` with `status='available'`, not a client-provided stock value. During checkout, lock the required available key rows (for example with `SELECT ... FOR UPDATE`) in a transaction. Assign keys and create order records atomically. A unique assignment plus transaction rollback prevents double sale. Use a consistent lock order and bounded retries for deadlock errors.
+
+Cart rows are not reservations and do not hold key inventory. A guest cart is identified by an HttpOnly random cookie; only its hash is stored in `carts.guest_token_hash`. The owner constraint ensures a cart belongs to exactly one account or guest token. On login/registration, guest items are merged transactionally into the account cart and the guest cart is deleted. If matching quantities would exceed the per-offer limit, the merge fails without discarding either cart.
+
+The current selling price is always read from `offers.price_minor` when rendering cart contents and is revalidated again during checkout. Soft-disabled offers remain joinable so the cart can clearly mark them unavailable and allow removal without losing the selected-offer reference. Cart updates require an active offer, active product/platform/region, and approved seller, but do not query or reserve `digital_keys`. Guests may browse and edit their cart; checkout must require an authenticated user.
 
 The simulated payment operation must not report success until the order and all requested keys have been committed as sold. If a future real payment provider is introduced, do not hold a database transaction open during a network call: add a reservation/expiry and payment-confirmation workflow, then fulfill idempotently after verified provider confirmation.
 

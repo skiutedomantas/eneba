@@ -2,8 +2,11 @@ import { Link, Route, Routes } from 'react-router-dom'
 import { SiteFooter } from './components/layout/SiteFooter'
 import { SiteHeader } from './components/layout/SiteHeader'
 import { StatusMessage } from './components/ui/StatusMessage'
+import { AuthProvider } from './contexts/AuthContext'
 import { HomePage } from './features/home/HomePage'
+import { AuthPage } from './pages/AuthPage'
 import { CatalogPage } from './pages/CatalogPage'
+import { CartPage } from './pages/CartPage'
 import { ProductDetailPage } from './pages/ProductDetailPage'
 
 function NotFoundPage() {
@@ -30,13 +33,18 @@ function NotFoundPage() {
 
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<HomePage />} />
-      <Route path="/store" element={<CatalogPage />} />
-      <Route path="/search" element={<CatalogPage searchMode />} />
-      <Route path="/products/:slug" element={<ProductDetailPage />} />
-      <Route path="*" element={<NotFoundPage />} />
-    </Routes>
+    <AuthProvider>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/store" element={<CatalogPage />} />
+        <Route path="/search" element={<CatalogPage searchMode />} />
+        <Route path="/products/:slug" element={<ProductDetailPage />} />
+        <Route path="/login" element={<AuthPage mode="login" />} />
+        <Route path="/register" element={<AuthPage mode="register" />} />
+        <Route path="/cart" element={<CartPage />} />
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </AuthProvider>
   )
 }
 

@@ -40,8 +40,8 @@ Build a thin vertical slice early, then extend it with tested business flows. Ke
 - Implement PDO repositories/services for products, categories, platforms, regions, hero banners, sales summaries, and eligible special deals.
 - Implement `GET /products`, `GET /categories`, `GET /platforms`, `GET /regions`, and the four independent homepage endpoints. Document every implemented endpoint and response format in `docs/API.md`.
 - Connect catalog filter, sort, price range, and pagination controls to the API; keep each homepage section's loading, error, retry, and empty states independent.
-- Build the responsive homepage and catalog using the shared components: large rectangular promotional banners, clearly separated sections, and dense dark product cards with artwork, prices, discounts, and region labels.
-- Seed 30 active game listings across varied categories, five seller profiles, and 61 EUR offers (two or three per game) with platform, region, and compare-at price variation. Keep cover image references deferred until IGDB assets can be retrieved; do not seed completed orders or digital keys. Best sellers, popular categories, and key-backed special deals stay empty until their qualifying data exists.
+- Build the responsive homepage and catalog using the shared components: large rectangular promotional banners, clearly separated sections, and dense dark product cards with artwork, prices, discounts, and region labels. Present homepage best sellers and special deals in touch-friendly carousels with responsive 2/3/5-card views and keyboard-operable controls.
+- Seed 30 active game listings across varied categories, five seller profiles, and 61 EUR offers (two or three per game) with platform, region, and compare-at price variation. Add repeatable simulated recent sales records so best sellers and popular categories are populated; surface discounted offers from the backend without inventing digital-key inventory. Keep cover image references deferred until IGDB assets can be retrieved.
 - Keep authentication, checkout, orders, and digital-key delivery out of this phase.
 - Add request validation and focused API tests for filters, paging, empty states, and inactive records.
 
@@ -61,12 +61,16 @@ Build a thin vertical slice early, then extend it with tested business flows. Ke
 
 ## Phase 4 — Authentication and cart
 
-- Implement hashed passwords, opaque server-side sessions, CSRF protection, session rotation/revocation, and rate limits on authentication.
-- Add registration/login/logout/me flows, protected route UX, and authenticated cart endpoints.
-- Recalculate cart prices and totals from current server-side offers on every read/checkout.
-- Test unauthenticated access, CSRF failures, session expiry/logout, and cart quantity validation.
+- Implemented password hashing, opaque 14-day server-side sessions, HttpOnly cookie handling, CSRF double-submit/session binding, session rotation/revocation, and hashed-IP rate limits.
+- Implemented registration/login/logout/current-user routes, account forms, and cart endpoints available to guests and signed-in users.
+- Persist guest carts server-side behind an HttpOnly guest token; merge them transactionally into the account cart on successful sign-in/registration, with an explicit conflict if duplicate quantities exceed the limit.
+- Cart items persist the selected offer ID; add/update validate offer and related-record status but do not require or reserve key inventory. Reads calculate prices and totals from current database offer prices; checkout will revalidate price and inventory in Phase 5.
+- Unavailable cart offers remain visible with no chargeable line total and can be removed; invalid add/update attempts receive explicit validation/conflict responses.
+- Added responsive guest/account cart UI, cart navigation/count, and per-offer Add to cart controls on product details. The cart route itself does not require sign-in.
+- Checkout will require authentication before proceeding; enforce this at both the Phase 5 frontend route and API.
+- Validate guest/session CSRF, guest-cart persistence/merge, unauthenticated checkout protection, session expiry/logout, rate limits, cart ownership, zero-inventory add/update, current-price recalculation, unavailable offers, and quantity bounds.
 
-**Exit:** private data is bound to the authenticated user; frontend route guards complement but do not replace API authorization.
+**Exit:** account carts remain private, guest carts are bound to an opaque cookie, and checkout (when implemented) requires API-side authentication.
 
 ## Phase 5 — Simulated checkout and secure delivery
 

@@ -169,11 +169,25 @@ expect(
 expect(count($lookups->platforms([])['data']) === 3, 'Expected the active platform lookup data.');
 expect(count($lookups->regions([])['data']) === 3, 'Expected the active region lookup data.');
 expect(count($home->heroBanners([])['data']) === 1, 'Expected the seeded active hero banner.');
-expect($home->bestSellers([])['data'] === [], 'Best sellers must remain empty without completed sales.');
-expect($home->specialDeals([])['data'] === [], 'Special deals must remain empty without available keys.');
+$bestSellers = $home->bestSellers([])['data'];
 expect(
-    $home->popularCategories([])['data'] === [],
-    'Popular categories must remain empty without completed sales.',
+    count($bestSellers) >= 1
+        && $bestSellers[0]['unitsSold'] > 0
+        && $bestSellers[0]['lowestOffer'] !== null,
+    'Best sellers should be ranked from recent backend sales data.',
+);
+$specialDeals = $home->specialDeals([])['data'];
+expect(
+    count($specialDeals) >= 1
+        && $specialDeals[0]['discountPercent'] > 0
+        && $specialDeals[0]['availableQuantity'] === 0,
+    'Discounted backend offers should display while reporting actual key inventory.',
+);
+$popularCategories = $home->popularCategories([])['data'];
+expect(
+    count($popularCategories) >= 1
+        && $popularCategories[0]['unitsSold'] > 0,
+    'Popular categories should be ranked from recent backend sales data.',
 );
 
 fwrite(STDOUT, "Catalog and homepage service checks passed.\n");

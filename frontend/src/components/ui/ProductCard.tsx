@@ -29,7 +29,6 @@ function ProductCard({ product }: ProductCardProps) {
     >
       <article
         className="flex h-full min-w-0 flex-col border border-outline bg-card transition-colors hover:border-savings"
-        role="listitem"
       >
         <div className="game-artwork relative aspect-[4/5] overflow-hidden">
           {product.imageUrl ? (

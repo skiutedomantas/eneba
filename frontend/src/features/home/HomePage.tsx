@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { SiteFooter } from '../../components/layout/SiteFooter'
 import { SiteHeader } from '../../components/layout/SiteHeader'
-import { ProductGrid } from '../../components/ui/ProductGrid'
+import { ProductCarousel } from '../../components/ui/ProductCarousel'
 import { PromoBanner } from '../../components/ui/PromoBanner'
 import { ResourceFeedback } from '../../components/ui/ResourceFeedback'
 import { SectionPanel } from '../../components/ui/SectionPanel'
@@ -65,7 +65,7 @@ function HomePage() {
         </div>
 
         <SectionPanel
-          description="Products ranked by completed purchases over the last 30 days."
+          description="Products ranked by recent sales activity."
           eyebrow="Popular with players"
           id="best-sellers"
           title="Best sellers"
@@ -75,18 +75,22 @@ function HomePage() {
               bestSellers.data !== null &&
               bestSellers.data.data.length === 0
             }
-            emptyMessage="Best sellers will appear after completed orders are recorded."
+            emptyMessage="No recent best sellers are available."
             error={bestSellers.error}
             loading={bestSellers.loading}
             onRetry={bestSellers.reload}
           />
           {bestSellers.data && bestSellers.data.data.length > 0 ? (
-            <ProductGrid products={bestSellers.data.data} />
+            <ProductCarousel
+              id="best-sellers-carousel"
+              label="Best sellers"
+              products={bestSellers.data.data}
+            />
           ) : null}
         </SectionPanel>
 
         <SectionPanel
-          description="In-stock offers with a valid compare-at price, ordered by savings."
+          description="Current discounted seller offers, ordered by savings."
           eyebrow="Limited-time value"
           id="special-deals"
           title="Special deals"
@@ -96,18 +100,22 @@ function HomePage() {
               specialDeals.data !== null &&
               specialDeals.data.data.length === 0
             }
-            emptyMessage="Deals appear here when discounted offers have available inventory."
+            emptyMessage="No discounted offers are available."
             error={specialDeals.error}
             loading={specialDeals.loading}
             onRetry={specialDeals.reload}
           />
           {specialDeals.data && dealProducts.length > 0 ? (
-            <ProductGrid products={dealProducts} />
+            <ProductCarousel
+              id="special-deals-carousel"
+              label="Special deals"
+              products={dealProducts}
+            />
           ) : null}
         </SectionPanel>
 
         <SectionPanel
-          description="Categories ranked by completed purchases over the last 30 days."
+          description="Categories ranked by recent sales activity."
           eyebrow="Find your next genre"
           id="categories"
           title="Popular categories"
@@ -117,7 +125,7 @@ function HomePage() {
               popularCategories.data !== null &&
               popularCategories.data.data.length === 0
             }
-            emptyMessage="Popular categories will appear after completed sales."
+            emptyMessage="No popular categories are available."
             error={popularCategories.error}
             loading={popularCategories.loading}
             onRetry={popularCategories.reload}

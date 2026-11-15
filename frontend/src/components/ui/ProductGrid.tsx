@@ -13,7 +13,9 @@ function ProductGrid({ products }: ProductGridProps) {
       role="list"
     >
       {products.map((product) => (
-        <ProductCard key={product.id} product={product} />
+        <div className="min-w-0" key={product.id} role="listitem">
+          <ProductCard product={product} />
+        </div>
       ))}
     </div>
   )
