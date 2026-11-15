@@ -11,11 +11,11 @@
 - Apply bounded pagination and allowlisted sort fields/directions. Never interpolate unchecked request values into SQL.
 - State-changing requests require CSRF validation. Do not enable permissive CORS.
 
-## Implemented scope through Phase 4
+## Implemented scope through Phase 5
 
-Phases 2B and 3 implement the health check, product catalog and reference-data lookups, four independent homepage endpoints, product search, and product detail with seller-offer comparison. Phase 4 adds customer registration, login/logout, session-backed identity, and a guest/account cart. Checkout, orders, and digital-key delivery remain future-phase contracts.
+Phases 2B and 3 implement the health check, product catalog and reference-data lookups, four independent homepage endpoints, product search, and product detail with seller-offer comparison. Phase 4 adds customer registration, login/logout, session-backed identity, and a guest/account cart. Phase 5 adds authenticated simulated checkout, order history, and encrypted fictional-key delivery. No real payment provider is integrated.
 
-An empty result is a successful response (`200`) with `"data": []`. The frontend receives all homepage section data from these independent backend endpoints; it does not embed product, deal, or category lists. The repeatable seeds create 30 active games, 61 active seller offers, recent simulated paid-order activity for sales-based rankings, and discounted offers for the deals section. No digital keys are seeded.
+An empty result is a successful response (`200`) with `"data": []`. The frontend receives all homepage section data from these independent backend endpoints; it does not embed product, deal, or category lists. The repeatable seeds create 30 active games, 61 active seller offers, recent simulated paid-order activity for sales-based rankings, and discounted offers for the deals section. Normal catalog seeding adds no digital keys; a separate local/test-only command creates fictional checkout inventory.
 
 Products span 11 categories. Offers use five seller profiles, EUR prices, compare-at prices, PC/PlayStation 5/Xbox Series X|S, and Global/Europe/United States regions. The catalog and product comparison pages do not display inventory status labels; the API still reports key availability for backend flows. Game cover references are deferred, so seeded products currently return `imageUrl: null`.
 
@@ -323,7 +323,7 @@ This hybrid is practical without another service at early scale. If catalog size
 | `POST` | `/cart/items` | Add an offer and quantity; body `{ "offerId": 123, "quantity": 1 }`. |
 | `PATCH` | `/cart/items/{id}` | Set a cart item's quantity. |
 | `DELETE` | `/cart/items/{id}` | Remove an item, including one whose offer is no longer available. |
-| `POST` | `/checkout` | Authenticated simulated checkout. Accept an idempotency key; server revalidates prices/currency and locks inventory. |
+| `POST` | `/checkout` | Authenticated simulated checkout. Requires `Idempotency-Key`; server revalidates current prices/currency and locks inventory. |
 
 Cart endpoints support both guests and authenticated users; mutations require CSRF validation. `GET /cart` returns the current account cart when signed in, otherwise the guest cart associated with the guest cookie (or an empty cart if none exists). The `gamehub_guest_cart` cookie is a 256-bit random, HttpOnly, SameSite=Lax token scoped to `/api/v1`; only its SHA-256 hash is stored. The cookie expires after 14 days. Guest cart contents are server-backed, so current offer details and prices are still read from the database.
 
@@ -360,19 +360,25 @@ Cart editing does not depend on digital-key inventory. Guests and signed-in user
 
 `itemCount` includes all cart quantities, including unavailable lines. Unavailable lines are excluded from payable subtotals. Multiple currencies are returned as separate totals rather than combined.
 
-Checkout response on success: `201` with order ID, status, currency, totals, and purchase item summaries. It must not include plaintext keys in the initial response; users retrieve delivery through the order endpoint after the order is committed as paid.
+`POST /checkout` requires a signed-in account and CSRF token. Send an `Idempotency-Key` header containing 8–128 letters, digits, periods, underscores, colons, or hyphens. The server locks the account cart, rechecks offer eligibility and current database prices, requires all items to use one currency, and locks the required available key rows in offer/key ID order. It verifies each selected ciphertext can be authenticated and decrypted with the configured key ring, then creates a paid order with purchase snapshots, assigns keys, and clears the cart in one database transaction. This is a fully simulated purchase: there is no payment provider, card data, or real payment.
+
+A successful first request returns `201` with `{ "data": { "orderId": 123, "status": "paid", "currency": "EUR", "subtotalMinor": 3798, "totalMinor": 3798 } }`. A retry using the same account and idempotency key returns `200` with the original order and does not create another purchase. The response never includes keys.
+
+Failures return explicit `409` codes such as `CART_EMPTY`, `OFFER_UNAVAILABLE`, `MIXED_CURRENCY_CART`, and `INSUFFICIENT_INVENTORY`; invalid/missing idempotency keys return `422 VALIDATION_ERROR`. Failed checkout leaves the cart, order rows, and key inventory unchanged. The frontend displays the failure and keeps the customer’s selections available for correction or retry.
 
 ## Orders and key delivery
 
-Reserved for Phase 5; not implemented through Phase 4.
-
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/orders` | Current user's paginated order history. |
+| `GET` | `/orders?page=1&perPage=20` | Current user's paginated order history (`perPage` 1–50). |
 | `GET` | `/orders/{id}` | Current user's order and item summaries; enforce ownership. |
 | `GET` | `/orders/{id}/keys` | Return plaintext purchased keys only after verifying ownership and paid status. Record an access audit event; do not cache the response. |
 
-Set key-response cache headers to `Cache-Control: no-store`; do not include keys in URLs, analytics, client logs, or error reporting. Consider allowing repeat reveal by the owning user for MVP support, with each retrieval audited. One-time retrieval adds account-recovery and delivery-failure complexity and is not assumed here.
+All order endpoints require a signed-in account and return `404 ORDER_NOT_FOUND` for orders owned by another user. Key retrieval also requires `status="paid"` and returns `409 ORDER_NOT_PAID` otherwise. The keys endpoint returns `{ "data": { "orderId": 123, "items": [{ "orderItemId": 456, "productName": "Example Game", "keys": ["GAMEHUB-DEMO-NOT-REDEEMABLE-..."] }] } }`. Repeated retrieval by the owner is supported and each successful reveal is audited.
+
+Fictional, visibly non-redeemable keys can be added to local/test databases with `APP_ENV=development php backend/bin/seed-fictional-keys.php` after configuring the encryption key ring. The seed keeps at least two available fictional keys per active offer and refuses to run outside local, development, or test environments. No fake keys are added by the catalog seed or to production. Key responses use `Cache-Control: no-store`; never include keys in URLs, application logs, analytics, or error reports.
+
+`digital_keys.ciphertext` is encrypted with PHP Sodium `secretbox`; its random nonce and key version are stored alongside it. Configure `KEY_ENCRYPTION_KEYS` as a JSON object mapping version numbers to base64-encoded 32-byte keys, and set `KEY_ENCRYPTION_KEY_VERSION` to the active version. Keep prior versions in the key ring while ciphertext uses them. The application fails closed when configuration is absent, invalid, or unable to decrypt a record.
 
 ## Admin and seller operations
 

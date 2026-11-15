@@ -64,22 +64,24 @@ Build a thin vertical slice early, then extend it with tested business flows. Ke
 - Implemented password hashing, opaque 14-day server-side sessions, HttpOnly cookie handling, CSRF double-submit/session binding, session rotation/revocation, and hashed-IP rate limits.
 - Implemented registration/login/logout/current-user routes, account forms, and cart endpoints available to guests and signed-in users.
 - Persist guest carts server-side behind an HttpOnly guest token; merge them transactionally into the account cart on successful sign-in/registration, with an explicit conflict if duplicate quantities exceed the limit.
-- Cart items persist the selected offer ID; add/update validate offer and related-record status but do not require or reserve key inventory. Reads calculate prices and totals from current database offer prices; checkout will revalidate price and inventory in Phase 5.
+- Cart items persist the selected offer ID; add/update validate offer and related-record status but do not require or reserve key inventory. Reads calculate prices and totals from current database offer prices; Phase 5 checkout now revalidates current prices and inventory.
 - Unavailable cart offers remain visible with no chargeable line total and can be removed; invalid add/update attempts receive explicit validation/conflict responses.
 - Added responsive guest/account cart UI, cart navigation/count, and per-offer Add to cart controls on product details. The cart route itself does not require sign-in.
-- Checkout will require authentication before proceeding; enforce this at both the Phase 5 frontend route and API.
+- Checkout requires authentication before proceeding; both the frontend route and API enforce this in Phase 5.
 - Validate guest/session CSRF, guest-cart persistence/merge, unauthenticated checkout protection, session expiry/logout, rate limits, cart ownership, zero-inventory add/update, current-price recalculation, unavailable offers, and quantity bounds.
 
 **Exit:** account carts remain private, guest carts are bound to an opaque cookie, and checkout (when implemented) requires API-side authentication.
 
 ## Phase 5 — Simulated checkout and secure delivery
 
-- Implement transactional, idempotent checkout with locked available keys, purchase snapshots, and consistent order state.
-- Implement order history/details and owner-checked key retrieval after successful simulated payment only.
-- Encrypt keys at ingestion, restrict decryption to delivery service, disable key-response caching, and add audit logging.
-- Test concurrent attempts against low inventory, retries with the same idempotency key, rollback paths, and unauthorized key access.
+- Implemented authenticated checkout with a required per-user idempotency key. Offer status and current database prices are revalidated, one currency is required, and cart, offer, and key rows are locked in deterministic order.
+- Selected encrypted keys are authenticated against the configured key ring before order creation. Order snapshots, simulated paid status, key assignments, and cart clearing commit in one transaction. Failures roll back writes and preserve cart contents and quantities; deadlock/lock-timeout retries are bounded.
+- Kept checkout fully simulated with no card collection or payment provider. Local/test-only tooling adds visibly fictional, non-redeemable keys; normal catalog seeds and production remain free of those keys.
+- Encrypted keys with Sodium authenticated encryption, a fresh nonce, and a versioned environment key ring. Decryption is restricted to the owner-checked paid-order delivery service, which sends `Cache-Control: no-store` and audits reveals without logging keys.
+- Implemented paginated order history/details and checkout, confirmation, and order-history UI. Guests are redirected to sign in before checkout without losing the guest cart.
+- Tested cart preservation, corrupt-key rejection, insufficient inventory, mixed currencies, current-price snapshots, concurrent final-key claims, idempotent retries, order ownership, unpaid-key rejection, and repeat delivery audits.
 
-**Exit:** no key can be assigned twice or disclosed before a committed paid order.
+**Exit:** successful simulated purchases atomically consume exactly the required keys and clear the cart; failures leave it intact; retries do not duplicate orders; fictional keys are revealed only to the owner of a paid order.
 
 ## Phase 6 — Hardening and release readiness
 

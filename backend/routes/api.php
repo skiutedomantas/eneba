@@ -7,19 +7,23 @@ use App\Repositories\AuthRepository;
 use App\Repositories\CartRepository;
 use App\Repositories\HomeRepository;
 use App\Repositories\LookupRepository;
+use App\Repositories\OrderRepository;
 use App\Repositories\ProductRepository;
 use App\Repositories\ProductSearchRepository;
 use App\Services\CatalogService;
 use App\Services\AuthService;
 use App\Services\CartService;
+use App\Services\CheckoutService;
 use App\Services\HomeService;
 use App\Services\LookupService;
+use App\Services\OrderService;
 use App\Services\ProductDetailService;
 use App\Services\SearchService;
 use App\Support\JsonResponse;
 use App\Support\ApiException;
 use App\Support\JsonRequest;
 use App\Support\ValidationError;
+use App\Security\DigitalKeyCipher;
 use App\Security\SessionCookies;
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -74,17 +78,22 @@ $authAndCartRoutes = [
     '/api/v1/auth/me' => ['GET'],
     '/api/v1/cart' => ['GET'],
     '/api/v1/cart/items' => ['POST'],
+    '/api/v1/checkout' => ['POST'],
+    '/api/v1/orders' => ['GET'],
 ];
 $cartItemMatch = [];
 $isCartItemPath = is_string($path)
     && preg_match('~^/api/v1/cart/items/([1-9][0-9]*)$~D', $path, $cartItemMatch) === 1;
+$orderPathMatch = [];
+$isOrderPath = is_string($path)
+    && preg_match('~^/api/v1/orders/([1-9][0-9]*)(/keys)?$~D', $path, $orderPathMatch) === 1;
 $cartItemMethods = ['PATCH', 'DELETE'];
-$isAuthOrCartPath = isset($authAndCartRoutes[$path]) || $isCartItemPath;
+$isAuthOrCartPath = isset($authAndCartRoutes[$path]) || $isCartItemPath || $isOrderPath;
 
 if ($isAuthOrCartPath) {
     $allowedMethods = $isCartItemPath
         ? $cartItemMethods
-        : $authAndCartRoutes[$path];
+        : ($isOrderPath ? ['GET'] : $authAndCartRoutes[$path]);
     if (!in_array($method, $allowedMethods, true)) {
         header('Allow: ' . implode(', ', $allowedMethods));
         JsonResponse::send(405, [
@@ -100,6 +109,7 @@ if ($isAuthOrCartPath) {
         $pdo = Connection::create();
         $cart = new CartService($pdo, new CartRepository($pdo));
         $auth = new AuthService($pdo, new AuthRepository($pdo), $cart);
+        $orders = new OrderRepository($pdo);
         $sessionToken = SessionCookies::sessionToken();
         $guestCartToken = SessionCookies::guestCartToken();
         $session = $auth->session($sessionToken);
@@ -246,6 +256,64 @@ if ($isAuthOrCartPath) {
                 ? $cart->removeGuest($guestCartToken, $itemId)
                 : $cart->remove($session['user_id'], $itemId);
             JsonResponse::send(200, $response);
+        }
+
+        if ($path === '/api/v1/checkout' && $method === 'POST') {
+            if ($session === null) {
+                throw new ApiException(401, 'UNAUTHENTICATED', 'Sign in to continue to checkout.');
+            }
+            $auth->assertCsrf(
+                $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null,
+                SessionCookies::csrfToken(),
+                $session,
+            );
+            $checkout = new CheckoutService($pdo, $orders, DigitalKeyCipher::fromEnvironment());
+            $result = $checkout->checkout(
+                $session['user_id'],
+                $_SERVER['HTTP_IDEMPOTENCY_KEY'] ?? null,
+                $requestId,
+            );
+            JsonResponse::send($result['httpStatus'], ['data' => $result['data']]);
+        }
+
+        if ($path === '/api/v1/orders' && $method === 'GET') {
+            if ($session === null) {
+                throw new ApiException(401, 'UNAUTHENTICATED', 'Sign in to view your orders.');
+            }
+            JsonResponse::send(
+                200,
+                (new OrderService($pdo, $orders))->listForUser($session['user_id'], $_GET),
+            );
+        }
+
+        if ($isOrderPath && $method === 'GET') {
+            if ($session === null) {
+                throw new ApiException(401, 'UNAUTHENTICATED', 'Sign in to view your orders.');
+            }
+            $orderId = filter_var($orderPathMatch[1], FILTER_VALIDATE_INT);
+            if ($orderId === false) {
+                throw new ValidationError(
+                    'One or more path parameters are invalid.',
+                    ['id' => 'Must be a positive integer.'],
+                );
+            }
+
+            if (($orderPathMatch[2] ?? '') === '/keys') {
+                $orderService = new OrderService(
+                    $pdo,
+                    $orders,
+                    DigitalKeyCipher::fromEnvironment(),
+                );
+                JsonResponse::send(
+                    200,
+                    $orderService->keysForUser($session['user_id'], $orderId, $requestId),
+                );
+            }
+
+            JsonResponse::send(
+                200,
+                (new OrderService($pdo, $orders))->getForUser($session['user_id'], $orderId),
+            );
         }
     } catch (ValidationError $exception) {
         JsonResponse::send(422, [

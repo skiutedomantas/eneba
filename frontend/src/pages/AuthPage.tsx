@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { SiteFooter } from '../components/layout/SiteFooter'
 import { SiteHeader } from '../components/layout/SiteHeader'
 import { useAuth } from '../contexts/useAuth'
@@ -8,12 +8,21 @@ import { ApiError } from '../lib/api/client'
 function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   const { user, loading, login, register } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const isRegister = mode === 'register'
+  const requestedReturnTo = new URLSearchParams(location.search).get('returnTo')
+  const returnTo = (
+    requestedReturnTo === '/checkout'
+    || requestedReturnTo === '/orders'
+    || /^\/orders\/[1-9][0-9]*$/.test(requestedReturnTo ?? '')
+  )
+    ? requestedReturnTo ?? '/cart'
+    : '/cart'
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
@@ -25,7 +34,7 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
       } else {
         await login({ email, password })
       }
-      navigate('/cart', { replace: true })
+      navigate(returnTo, { replace: true })
     } catch (cause) {
       setError(
         cause instanceof ApiError
@@ -38,7 +47,7 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   }
 
   if (!loading && user !== null) {
-    return <Navigate replace to="/cart" />
+    return <Navigate replace to={returnTo} />
   }
 
   return (
@@ -55,7 +64,9 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
           <p className="mt-2 text-sm text-muted">
             {isRegister
               ? 'Create an account to save your selected offers in a cart.'
-              : 'Sign in to view and update your cart.'}
+              : returnTo === '/checkout'
+                ? 'Sign in to continue to checkout. Your cart will be preserved.'
+                : 'Sign in to access your account.'}
           </p>
 
           <form className="mt-7 space-y-5" onSubmit={handleSubmit}>
@@ -124,7 +135,10 @@ function AuthPage({ mode }: { mode: 'login' | 'register' }) {
             {isRegister ? 'Already have an account?' : 'New to GameHub?'}{' '}
             <Link
               className="font-bold text-text underline decoration-savings underline-offset-4 hover:text-savings"
-              to={isRegister ? '/login' : '/register'}
+              to={{
+                pathname: isRegister ? '/login' : '/register',
+                search: requestedReturnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : '',
+              }}
             >
               {isRegister ? 'Sign in' : 'Create an account'}
             </Link>

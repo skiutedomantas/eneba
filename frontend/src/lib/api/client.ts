@@ -69,6 +69,7 @@ async function sendJson<T>(
   method: 'POST' | 'PATCH' | 'DELETE',
   body: unknown,
   csrfToken: string,
+  additionalHeaders: Record<string, string> = {},
 ): Promise<T> {
   const response = await fetch(path, {
     method,
@@ -76,6 +77,7 @@ async function sendJson<T>(
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
+      ...additionalHeaders,
       'X-CSRF-Token': csrfToken,
     },
     ...(method === 'DELETE' ? {} : { body: JSON.stringify(body) }),

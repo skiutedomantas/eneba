@@ -25,8 +25,8 @@ interface CartResponse {
   data: CartData
 }
 
-async function getCart(): Promise<CartData> {
-  const response = await getJson<CartResponse>('/api/v1/cart')
+async function getCart(signal?: AbortSignal): Promise<CartData> {
+  const response = await getJson<CartResponse>('/api/v1/cart', signal)
   return response.data
 }
 

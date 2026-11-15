@@ -8,6 +8,8 @@ import { AuthPage } from './pages/AuthPage'
 import { CatalogPage } from './pages/CatalogPage'
 import { CartPage } from './pages/CartPage'
 import { ProductDetailPage } from './pages/ProductDetailPage'
+import { CheckoutPage } from './pages/CheckoutPage'
+import { OrderDetailPage, OrderHistoryPage } from './pages/OrdersPage'
 
 function NotFoundPage() {
   return (
@@ -42,6 +44,9 @@ function App() {
         <Route path="/login" element={<AuthPage mode="login" />} />
         <Route path="/register" element={<AuthPage mode="register" />} />
         <Route path="/cart" element={<CartPage />} />
+        <Route path="/checkout" element={<CheckoutPage />} />
+        <Route path="/orders" element={<OrderHistoryPage />} />
+        <Route path="/orders/:orderId" element={<OrderDetailPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </AuthProvider>

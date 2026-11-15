@@ -142,6 +142,16 @@ function CartPage() {
   }
 
   const cart = cartResource.data
+  const cartCurrencies = new Set(cart?.items
+    .filter((item) => item.offerAvailable && item.currency !== null)
+    .map((item) => item.currency))
+  const hasUnavailableOffers = cart?.items.some((item) => !item.offerAvailable) ?? false
+  const canProceedToCheckout = Boolean(
+    cart
+    && cart.items.length > 0
+    && !hasUnavailableOffers
+    && cartCurrencies.size === 1,
+  )
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-text">
@@ -221,6 +231,19 @@ function CartPage() {
                   <p className="mt-4 text-sm text-region">
                     Remove unavailable offers to keep your cart up to date.
                   </p>
+                ) : null}
+                {cartCurrencies.size > 1 ? (
+                  <p className="mt-4 text-sm text-region">
+                    Checkout requires items in one currency. Adjust your cart to continue.
+                  </p>
+                ) : null}
+                {canProceedToCheckout ? (
+                  <Link
+                    className="mt-5 block border border-savings bg-savings px-4 py-3 text-center font-black text-background hover:brightness-110"
+                    to="/checkout"
+                  >
+                    Continue to checkout
+                  </Link>
                 ) : null}
               </aside>
             </div>

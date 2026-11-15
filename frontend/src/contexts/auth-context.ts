@@ -6,6 +6,7 @@ export interface AuthContextValue {
   loading: boolean
   error: string | null
   cartItemCount: number
+  refreshCart: () => Promise<void>
   login: (input: { email: string; password: string }) => Promise<void>
   register: (input: {
     email: string

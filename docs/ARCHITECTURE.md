@@ -126,7 +126,7 @@ Reusable React components should own consistent styling and behavior: site heade
 ## Runtime and configuration
 
 - Serve the built SPA and `/api/v1` through HTTPS on the same origin. In development, use Vite's proxy to forward API requests to PHP.
-- Configure database credentials, session settings, key-encryption secret, and environment-specific options through environment variables. Keep real secrets outside version control.
+- Configure database credentials, session settings, a versioned digital-key encryption key ring, and environment-specific options through environment variables. Keep real secrets outside version control.
 - Return JSON for API responses, use UTC timestamps, and centralize error formatting and request IDs.
 - Add migrations and deterministic seed data before relying on manually edited databases.
 - For production, disable verbose PHP errors in responses and log them server-side with request IDs.
@@ -137,7 +137,9 @@ The browser receives an opaque random session token in an `HttpOnly`, `SameSite=
 
 The React auth context loads the current user and cart count. The cart is intentionally available to anonymous visitors as well as signed-in users, so it is not wrapped in an auth guard. Checkout is the point where sign-in is required; that authorization must be enforced by both route UX and the checkout API, with the API as the security boundary.
 
-Anonymous carts are server-backed and keyed by a random HttpOnly guest cookie whose SHA-256 hash is stored in the database. Cart entries store only `cart_id`, selected `offer_id`, and quantity. Cart add/update validate current offer eligibility but do not consult digital-key inventory. Every cart read joins current offer data and recalculates totals from its current price; an offer that becomes inactive stays visible as unpriced and removable. On sign-in/registration, merge guest entries into the account cart transactionally and clear the guest cookie. Checkout in the next phase remains the authoritative authentication and inventory check and must lock and assign real keys transactionally.
+Anonymous carts are server-backed and keyed by a random HttpOnly guest cookie whose SHA-256 hash is stored in the database. Cart entries store only `cart_id`, selected `offer_id`, and quantity. Cart add/update validate current offer eligibility but do not consult digital-key inventory. Every cart read joins current offer data and recalculates totals from its current price; an offer that becomes inactive stays visible as unpriced and removable. On sign-in/registration, merge guest entries into the account cart transactionally and clear the guest cookie.
+
+Checkout requires an authenticated user and CSRF validation. It revalidates current offers and prices, requires one currency, then locks the cart, offers, and enough available key rows in a consistent order. The order snapshots, simulated paid status, key assignments, and cart clear commit atomically; any failure preserves the cart. Per-user idempotency keys make retries return the original order. There is no payment-provider integration. Local/test-only fictional keys are explicitly non-redeemable and encrypted with Sodium `secretbox` using a versioned environment key ring. Key reveal checks paid status and ownership, records an audit event, and returns a no-store response; plaintext is never logged.
 
 ## Error and observability conventions
 

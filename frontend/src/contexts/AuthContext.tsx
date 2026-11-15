@@ -135,6 +135,11 @@ function AuthProvider({ children }: { children: ReactNode }) {
     setCartItemCount(0)
   }, [csrfToken])
 
+  const refreshCart = useCallback(async () => {
+    const cart = await getCart()
+    setCartItemCount(cart.itemCount)
+  }, [])
+
   const addToCart = useCallback(
     async (offerId: number) => {
       const token = csrfToken ?? (await getCsrfToken())
@@ -168,6 +173,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       error,
       cartItemCount,
+      refreshCart,
       login,
       register,
       logout,
@@ -180,6 +186,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       error,
       cartItemCount,
+      refreshCart,
       login,
       register,
       logout,

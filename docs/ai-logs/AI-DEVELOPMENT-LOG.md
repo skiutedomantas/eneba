@@ -317,3 +317,29 @@ The user clarified that cart browsing and editing must work before sign-in, with
 - Authentication/cart tests cover anonymous empty carts, zero-inventory guest additions for all 30 products, account merge and quantity combination, merge conflicts, current-price recalculation, and unavailable offers.
 - Backend service, catalog/homepage, and search/product checks passed; PHP syntax checks and frontend build/lint passed.
 
+## 2026-11-15 — Phase 5 simulated checkout and fictional key delivery
+
+### Request and approval
+
+The user approved Phase 5 and added three requirements: failed checkout must preserve the cart, successful purchases must deliver fictional digital keys, and checkout must be fully simulated with no real payment provider.
+
+### Changes
+
+- Added authenticated `POST /checkout` with CSRF validation, required per-user idempotency keys, current offer/price checks, single-currency validation, deterministic row locking, bounded deadlock retries, purchase-time snapshots, key assignment, simulated paid status, and cart clearing in one transaction.
+- Checkout authenticates each selected encrypted key against the configured key ring before order creation; corrupt or undecryptable inventory is rejected without changing the cart.
+- Failed checkout rolls back order and key writes and leaves every cart line and quantity intact. Insufficient inventory, unavailable offers, mixed currencies, empty carts, and invalid idempotency keys return explicit errors.
+- Added paginated order history, owner-checked order details, and paid-order key delivery with per-item access auditing and `Cache-Control: no-store`.
+- Added Sodium `secretbox` encryption with random nonces and a versioned environment key ring. Ciphertext is bound to the offer ID; decryption fails closed if configuration or authentication is invalid.
+- Added local/test-only fictional key seeding. Keys are labeled non-redeemable, encrypted before storage, and excluded from normal catalog seeding and production environments.
+- Added checkout, order history, confirmation, and explicit fictional-key reveal UI. Guests are sent to sign-in before checkout; the guest cart merges through the existing authentication flow. No payment provider or card data is used.
+- Added a root `.env.example` for database and key-ring configuration, and updated the architecture, database, API, and implementation-plan documentation.
+
+### Validation
+
+- `php backend/tests/checkout_orders.php` passed successful simulated purchase, current price snapshots, one-time key assignment, idempotent retry, history/detail access, owner checks, paid-only delivery, encrypted fictional-key reveal, multi-item cart preservation after insufficient inventory, and corrupt-key rejection.
+- `php backend/tests/concurrent_checkout.php` passed with two simultaneous buyers competing for one key: exactly one order committed and the other cart remained available for retry.
+- PHP syntax checks passed for the new services, repository, routes, seeder, and tests.
+- Frontend production build/type-check and Oxlint passed.
+- Sodium support was confirmed in the PHP runtime.
+- Anonymous HTTP smoke checks returned `401` for checkout, order history, and key delivery. The fictional-key seed command rejected a production environment.
+

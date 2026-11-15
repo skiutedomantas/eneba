@@ -61,6 +61,12 @@ function SiteHeader() {
               </Link>
               {user ? (
                 <>
+                  <Link
+                    className="border border-outline px-3 py-2 hover:bg-card"
+                    to="/orders"
+                  >
+                    Orders
+                  </Link>
                   <span className="hidden max-w-36 truncate text-muted lg:block">
                     {user.displayName}
                   </span>
