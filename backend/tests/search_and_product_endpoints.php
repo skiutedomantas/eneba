@@ -3,11 +3,14 @@
 declare(strict_types=1);
 
 use App\Database\Connection;
+use App\Repositories\AuthRepository;
 use App\Repositories\ProductRepository;
 use App\Repositories\ProductSearchRepository;
 use App\Services\ProductDetailService;
+use App\Services\RateLimitService;
 use App\Services\ProductSearchIndexService;
 use App\Services\SearchService;
+use App\Support\ApiException;
 use App\Support\ValidationError;
 
 require dirname(__DIR__) . '/bootstrap.php';
@@ -89,6 +92,17 @@ expectSearch(
         && $detail['data']['offers'][1]['priceMinor'] <= $detail['data']['offers'][2]['priceMinor'],
     'Seller offers should be sorted by price.',
 );
+foreach ($detail['data']['offers'] as $offer) {
+    $availableCount = $pdo->prepare(
+        "SELECT COUNT(*) FROM digital_keys
+         WHERE offer_id = :offer_id AND status = 'available'",
+    );
+    $availableCount->execute(['offer_id' => $offer['offerId']]);
+    expectSearch(
+        $offer['availableQuantity'] === (int) $availableCount->fetchColumn(),
+        'Product detail inventory counts should match the database.',
+    );
+}
 expectSearch(
     count(array_unique(array_column(array_column($detail['data']['offers'], 'seller'), 'name'))) === 3,
     'Offer comparison should identify each seller.',
@@ -99,8 +113,8 @@ expectSearch(
     'Seller offers should cover multiple platforms and regions.',
 );
 expectSearch(
-    array_column($detail['data']['offers'], 'availableQuantity') === [0, 0, 0],
-    'Offer availability should reflect the current digital-key inventory.',
+    count(array_column($detail['data']['offers'], 'availableQuantity')) === 3,
+    'Product detail should include inventory counts for every active seller offer.',
 );
 expectSearch(
     $details->getBySlug('missing-product') === null,
@@ -160,6 +174,22 @@ try {
             && $bounded['meta']['capped'] === true,
         'Search should cap and report its candidate set at 100 products.',
     );
+} finally {
+    $pdo->rollBack();
+}
+
+$pdo->beginTransaction();
+try {
+    $rateLimits = new RateLimitService(new AuthRepository($pdo));
+    for ($attempt = 0; $attempt < 60; $attempt++) {
+        $rateLimits->assertAllowed('search', '203.0.113.79');
+    }
+    try {
+        $rateLimits->assertAllowed('search', '203.0.113.79');
+        throw new RuntimeException('The search rate limit was not enforced.');
+    } catch (ApiException $exception) {
+        expectSearch($exception->errorCode === 'RATE_LIMITED', 'Unexpected search rate-limit response.');
+    }
 } finally {
     $pdo->rollBack();
 }

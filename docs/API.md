@@ -7,9 +7,10 @@
 - Money uses `{ "amountMinor": 1299, "currency": "EUR" }`.
 - Paginated lists use `{ "data": [...], "meta": { "page": 1, "perPage": 24, "total": 42 } }`. Bounded section and lookup lists use `{ "data": [...], "meta": { "limit": 8 } }`.
 - Errors use `{ "error": { "code": "VALIDATION_ERROR", "message": "...", "fields": {} , "requestId": "..." } }`. Omit `fields` when inapplicable. Never return SQL, stack traces, secrets, or key ciphertext.
-- Use `400` for malformed input, `401` for missing/invalid authentication, `403` for insufficient permission/CSRF failure, `404` for missing resources, `409` for conflicts/insufficient inventory, `422` for semantic validation failures, and `429` for throttling.
+- Use `400` for malformed input, `401` for missing/invalid authentication, `403` for insufficient permission/CSRF failure, `404` for missing resources, `409` for conflicts/insufficient inventory, `413` for oversized request bodies, `422` for semantic validation failures, and `429` for throttling.
 - Apply bounded pagination and allowlisted sort fields/directions. Never interpolate unchecked request values into SQL.
 - State-changing requests require CSRF validation. Do not enable permissive CORS.
+- Mutating JSON requests must use `Content-Type: application/json` and are limited to 16 KiB.
 
 ## Implemented scope through Phase 5
 
@@ -49,7 +50,7 @@ Database configuration or availability errors return `503` with the standard err
 | `POST` | `/auth/logout` | Revoke the current session and expire session/CSRF cookies. |
 | `GET` | `/auth/me` | Return current user or `401`. |
 
-Authentication endpoints use same-origin cookies named `gamehub_session` and `gamehub_csrf`, scoped to `/api/v1`, `SameSite=Lax`, and `HttpOnly`. The session cookie is Secure on HTTPS/production, with `SESSION_COOKIE_SECURE` available for deployment configuration. Session tokens are 256-bit random values; only their SHA-256 hashes are stored. Sessions expire after 14 days. The CSRF endpoint returns a token in JSON for the frontend to keep in memory; mutating requests must send the same token in `X-CSRF-Token` and the CSRF cookie. For signed-in sessions it is also checked against the session's stored CSRF-token hash. Login and registration use the anonymous double-submit token too.
+Authentication endpoints use same-origin cookies named `gamehub_session` and `gamehub_csrf`, scoped to `/api/v1`, `SameSite=Lax`, and `HttpOnly`. The session cookie is always Secure when `APP_ENV=production`; `SESSION_COOKIE_SECURE` can override transport detection outside production. Session tokens are 256-bit random values; only their SHA-256 hashes are stored. Sessions expire after 14 days. The CSRF endpoint returns a token in JSON for the frontend to keep in memory; mutating requests must send the same token in `X-CSRF-Token` and the CSRF cookie. For signed-in sessions it is also checked against the session's stored CSRF-token hash. Login and registration use the anonymous double-submit token too.
 
 Registration accepts `{ "email": "...", "password": "...", "displayName": "..." }`. Email addresses are normalized to lowercase, display names must be 2–80 bytes, and passwords must be 12–72 bytes. Login accepts `{ "email": "...", "password": "..." }`. Successful responses return `{ "data": { "user": { "id": 1, "email": "...", "displayName": "..." }, "csrfToken": "..." } }`; registration returns `201`, login `200`. The CSRF bootstrap response is `{ "data": { "csrfToken": "..." } }`; `/auth/me` returns `{ "data": { "user": ... } }`. Authentication attempts are rate-limited per hashed client IP: 10 login attempts per 15 minutes and 5 registrations per hour. `409 EMAIL_ALREADY_REGISTERED`, `401 INVALID_CREDENTIALS`, `403 CSRF_VALIDATION_FAILED`, and `429 RATE_LIMITED` are explicit errors.
 
@@ -267,7 +268,7 @@ Search response:
 }
 ```
 
-`meta.total` describes the filtered, ranked results in the bounded scored set. `capped` is true when 100 eligible scoring candidates (or the 1,000-result lexical pool) are reached; in that case, more matches may exist beyond this page set. Invalid or too-short queries return `422 VALIDATION_ERROR`; an unmatched query returns `200` with empty `data`. Search-specific request rate limiting is deferred to Phase 6; query length, pagination, and candidate count are bounded in this phase.
+`meta.total` describes the filtered, ranked results in the bounded scored set. `capped` is true when 100 eligible scoring candidates (or the 1,000-result lexical pool) are reached; in that case, more matches may exist beyond this page set. Invalid or too-short queries return `422 VALIDATION_ERROR`; an unmatched query returns `200` with empty `data`. Search allows 60 requests per minute per hashed client IP and returns `429 RATE_LIMITED` after the limit; query length, pagination, and candidate count are also bounded.
 
 `GET /products/{slug}` returns `404 NOT_FOUND` when the product is missing or inactive. Only active products and active offers from approved sellers with active platform/region options are exposed. Offers include an `availableQuantity` value derived from digital-key records and are grouped by currency, then ordered by price and offer ID within each currency; amounts in different currencies are not treated as directly comparable. A product with no qualifying offers returns an empty `offers` list. The frontend does not show availability labels.
 

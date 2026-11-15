@@ -36,6 +36,8 @@ $requestId = bin2hex(random_bytes(16));
 $pdo->beginTransaction();
 
 try {
+    $pdo->exec("UPDATE digital_keys SET status = 'disabled' WHERE status = 'available'");
+
     $userInsert = $pdo->prepare(
         'INSERT INTO users (email, password_hash, display_name)
          VALUES (:email, :password_hash, :display_name)',

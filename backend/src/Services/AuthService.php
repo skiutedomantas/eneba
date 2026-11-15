@@ -16,12 +16,14 @@ final class AuthService
     private const TOKEN_PATTERN = '/^[a-f0-9]{64}$/D';
 
     private static ?string $dummyPasswordHash = null;
+    private readonly RateLimitService $rateLimits;
 
     public function __construct(
         private readonly PDO $pdo,
         private readonly AuthRepository $auth,
         private readonly CartService $carts,
     ) {
+        $this->rateLimits = new RateLimitService($auth);
     }
 
     /**
@@ -130,7 +132,7 @@ final class AuthService
         $email = self::email($input['email'] ?? null);
         $password = self::password($input['password'] ?? null);
         $displayName = self::displayName($input['displayName'] ?? null);
-        $this->checkRateLimit('register', $clientIp);
+        $this->rateLimits->assertAllowed('register', $clientIp);
 
         $passwordHash = password_hash($password, PASSWORD_DEFAULT);
         if (!is_string($passwordHash)) {
@@ -192,7 +194,7 @@ final class AuthService
         $this->assertFields($input, ['email', 'password']);
         $email = self::email($input['email'] ?? null);
         $password = self::password($input['password'] ?? null);
-        $this->checkRateLimit('login', $clientIp);
+        $this->rateLimits->assertAllowed('login', $clientIp);
 
         $user = $this->auth->userByEmail($email);
         $hash = $user['password_hash'] ?? self::dummyPasswordHash();
@@ -227,23 +229,6 @@ final class AuthService
     {
         if ($rawToken !== null && preg_match(self::TOKEN_PATTERN, $rawToken) === 1) {
             $this->auth->revokeSession(hash('sha256', $rawToken));
-        }
-    }
-
-    private function checkRateLimit(string $action, string $clientIp): void
-    {
-        $ip = filter_var($clientIp, FILTER_VALIDATE_IP) ? $clientIp : 'unknown';
-        $attemptCount = $this->auth->incrementRateLimit(
-            $action,
-            hash('sha256', $ip),
-        );
-        $limit = $action === 'login' ? 10 : 5;
-        if ($attemptCount > $limit) {
-            throw new ApiException(
-                429,
-                'RATE_LIMITED',
-                'Too many authentication attempts. Please wait before trying again.',
-            );
         }
     }
 

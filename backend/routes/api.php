@@ -18,6 +18,7 @@ use App\Services\HomeService;
 use App\Services\LookupService;
 use App\Services\OrderService;
 use App\Services\ProductDetailService;
+use App\Services\RateLimitService;
 use App\Services\SearchService;
 use App\Support\JsonResponse;
 use App\Support\ApiException;
@@ -49,7 +50,6 @@ if ($method === 'GET' && $path === '/api/v1/health') {
         error_log(json_encode([
             'requestId' => $requestId,
             'exception' => $exception::class,
-            'message' => $exception->getMessage(),
         ], JSON_UNESCAPED_SLASHES));
 
         JsonResponse::send(503, [
@@ -350,12 +350,11 @@ if ($isAuthOrCartPath) {
         error_log(json_encode([
             'requestId' => $requestId,
             'exception' => $exception::class,
-            'message' => $exception->getMessage(),
         ], JSON_UNESCAPED_SLASHES));
         JsonResponse::send(503, [
             'error' => [
                 'code' => 'SERVICE_UNAVAILABLE',
-                'message' => 'The service is not configured.',
+                'message' => 'The service is temporarily unavailable.',
                 'requestId' => $requestId,
             ],
         ]);
@@ -381,6 +380,12 @@ $isProductDetailPath = is_string($path)
 if ($method === 'GET' && (in_array($path, $getEndpoints, true) || $isProductDetailPath)) {
     try {
         $pdo = Connection::create();
+        if ($path === '/api/v1/search') {
+            (new RateLimitService(new AuthRepository($pdo)))->assertAllowed(
+                'search',
+                $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+            );
+        }
         if ($isProductDetailPath) {
             $response = (new ProductDetailService(
                 new ProductRepository($pdo),
@@ -438,6 +443,14 @@ if ($method === 'GET' && (in_array($path, $getEndpoints, true) || $isProductDeta
                 'requestId' => $requestId,
             ],
         ]);
+    } catch (ApiException $exception) {
+        JsonResponse::send($exception->status, [
+            'error' => [
+                'code' => $exception->errorCode,
+                'message' => $exception->getMessage(),
+                'requestId' => $requestId,
+            ],
+        ]);
     } catch (\PDOException $exception) {
         error_log(json_encode([
             'requestId' => $requestId,
@@ -455,13 +468,12 @@ if ($method === 'GET' && (in_array($path, $getEndpoints, true) || $isProductDeta
         error_log(json_encode([
             'requestId' => $requestId,
             'exception' => $exception::class,
-            'message' => $exception->getMessage(),
         ], JSON_UNESCAPED_SLASHES));
 
         JsonResponse::send(503, [
             'error' => [
                 'code' => 'SERVICE_UNAVAILABLE',
-                'message' => 'The service is not configured.',
+                'message' => 'The service is temporarily unavailable.',
                 'requestId' => $requestId,
             ],
         ]);

@@ -24,6 +24,11 @@ $pdo = Connection::create();
 $catalog = new CatalogService(new ProductRepository($pdo));
 $home = new HomeService(new HomeRepository($pdo));
 $lookups = new LookupService(new LookupRepository($pdo));
+$digitalKeyRowsBefore = (int) $pdo->query('SELECT COUNT(*) FROM digital_keys')->fetchColumn();
+$availableCount = $pdo->prepare(
+    "SELECT COUNT(*) FROM digital_keys
+     WHERE offer_id = :offer_id AND status = 'available'",
+);
 
 $offerSummary = $pdo->query(
     "SELECT
@@ -61,11 +66,6 @@ expect(
     (int) $offerCoverage === 0,
     'Every active game should have two or three offers from distinct sellers.',
 );
-expect(
-    (int) $pdo->query('SELECT COUNT(*) FROM digital_keys')->fetchColumn() === 0,
-    'The catalog seed must not add digital-key inventory.',
-);
-
 $all = $catalog->listProducts(['perPage' => '48']);
 expect($all['meta']['total'] === 30, 'Expected all 30 active games.');
 expect(count($all['data']) === 30, 'Expected all games on the first page.');
@@ -75,7 +75,11 @@ $productsWithOffers = array_values(array_filter(
 ));
 expect(
     count($productsWithOffers) === 30
-        && $productsWithOffers[0]['lowestOffer']['availableQuantity'] === 0,
+        && (function () use ($availableCount, $productsWithOffers): bool {
+            $offer = $productsWithOffers[0]['lowestOffer'];
+            $availableCount->execute(['offer_id' => $offer['offerId']]);
+            return $offer['availableQuantity'] === (int) $availableCount->fetchColumn();
+        })(),
     'Catalog results should retain key inventory counts from the backend.',
 );
 expect(
@@ -180,7 +184,10 @@ $specialDeals = $home->specialDeals([])['data'];
 expect(
     count($specialDeals) >= 1
         && $specialDeals[0]['discountPercent'] > 0
-        && $specialDeals[0]['availableQuantity'] === 0,
+        && (function () use ($availableCount, $specialDeals): bool {
+            $availableCount->execute(['offer_id' => $specialDeals[0]['offerId']]);
+            return $specialDeals[0]['availableQuantity'] === (int) $availableCount->fetchColumn();
+        })(),
     'Discounted backend offers should display while reporting actual key inventory.',
 );
 $popularCategories = $home->popularCategories([])['data'];
@@ -188,6 +195,10 @@ expect(
     count($popularCategories) >= 1
         && $popularCategories[0]['unitsSold'] > 0,
     'Popular categories should be ranked from recent backend sales data.',
+);
+expect(
+    (int) $pdo->query('SELECT COUNT(*) FROM digital_keys')->fetchColumn() === $digitalKeyRowsBefore,
+    'Catalog and homepage reads must not mutate digital-key inventory.',
 );
 
 fwrite(STDOUT, "Catalog and homepage service checks passed.\n");

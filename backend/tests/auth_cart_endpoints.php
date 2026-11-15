@@ -8,6 +8,7 @@ use App\Repositories\CartRepository;
 use App\Services\AuthService;
 use App\Services\CartService;
 use App\Support\ApiException;
+use App\Support\JsonRequest;
 use App\Support\ValidationError;
 
 require dirname(__DIR__) . '/bootstrap.php';
@@ -26,9 +27,18 @@ $suffix = bin2hex(random_bytes(6));
 $email = "phase4-{$suffix}@example.test";
 $otherEmail = "phase4-other-{$suffix}@example.test";
 $ip = '203.0.113.41';
+$parsedBody = JsonRequest::parse('application/json; charset=utf-8', '{"ready":true}');
+expect($parsedBody === ['ready' => true], 'Valid JSON request bodies should be parsed.');
+try {
+    JsonRequest::parse('application/json', str_repeat('x', 16385));
+    throw new RuntimeException('An oversized JSON request body was accepted.');
+} catch (ApiException $exception) {
+    expect($exception->status === 413, 'Oversized JSON bodies should return 413.');
+}
 $pdo->beginTransaction();
 
 try {
+    $pdo->exec("UPDATE digital_keys SET status = 'disabled' WHERE status = 'available'");
     expect(
         $cart->getGuest(null)['data']['items'] === [],
         'An anonymous visitor without a guest cookie should have an empty cart.',

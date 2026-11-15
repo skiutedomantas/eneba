@@ -150,7 +150,8 @@ SQL);
         $windowSeconds = match ($action) {
             'login' => 900,
             'register' => 3600,
-            default => throw new \LogicException('Unsupported authentication rate-limit action.'),
+            'search' => 60,
+            default => throw new \LogicException('Unsupported rate-limit action.'),
         };
         $statement = $this->pdo->prepare(sprintf(
             'INSERT INTO auth_rate_limits (

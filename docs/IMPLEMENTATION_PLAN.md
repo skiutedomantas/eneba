@@ -50,7 +50,7 @@ Build a thin vertical slice early, then extend it with tested business flows. Ke
 ## Phase 3 — Search and product comparison
 
 - Implement `GET /search` using Unicode-normalized input, MySQL FULLTEXT natural/prefix matching, a bounded gram-index fallback, and relevance-first pagination. Apply catalog filters before scoring no more than 100 candidates.
-- Maintain the derived name-gram index during seeding and provide an explicit rebuild command for catalog name/status changes. Cap fuzzy candidates at 100; defer search request rate limiting to Phase 6.
+- Maintain the derived name-gram index during seeding and provide an explicit rebuild command for catalog name/status changes. Cap fuzzy candidates at 100 and apply search request rate limiting in Phase 6.
 - Implement `GET /products/{slug}` with active product details and active offers from approved sellers, including seller, platform, region, compare-at/current price, discount, and available inventory.
 - Maintain multiple seller profiles and comparable offers on active game products. Product cards and comparison pages show price, platform, region, and discounts without inventory status labels.
 - Connect the global search bar to a URL-backed results page with loading, error, empty, retry, filter, and pagination states. Make product cards link to detail pages.
@@ -85,12 +85,14 @@ Build a thin vertical slice early, then extend it with tested business flows. Ke
 
 ## Phase 6 — Hardening and release readiness
 
-- Review all endpoints for authorization, validation, SQL parameterization, CSRF, output encoding, and rate limiting.
-- Verify responsive accessibility, loading/empty/error states, and complete order journey.
-- Add structured server logging without secrets, production error handling, backup/restore notes, and operational configuration.
-- Run targeted suites, then the full test/build/type-check/lint commands that exist in the initialized project.
+- Enforced a 60-request/minute search limit per hashed client IP and a 16 KiB ceiling for JSON request bodies; kept the existing login/registration limits on the same fixed-window limiter.
+- Ensured production session cookies remain Secure, added defensive API security headers, disabled PHP error display, and removed exception messages from logs and generic service responses.
+- Added a transactional registration-to-cart-to-simulated-checkout-to-key-delivery user-journey test, plus regression checks for rate limiting, oversized JSON bodies, and inventory-aware test fixtures.
+- Added practical deployment instructions for the Vite SPA, PHP-FPM API, MySQL migrations/seeds, secret management, TLS/reverse proxy, health checks, and backup/restore.
+- Reviewed the complete customer flow for keyboard/focus behavior, labels, live feedback, reduced motion, and React's escaped rendering; kept production commerce limitations explicit.
+- Ran focused and full backend suites, frontend production build/type-check and lint, PHP syntax checks, and deployment configuration checks.
 
-**Exit:** reproducible deployment configuration, documented limitations, and verified customer workflows.
+**Exit:** reproducible deployment configuration, documented limitations, and a passing registration-to-key-delivery workflow.
 
 ## Priority order
 
@@ -110,7 +112,7 @@ Build a thin vertical slice early, then extend it with tested business flows. Ke
 - Key endpoints do not reveal content before paid status and do not cache it.
 - Home sections load independently; a failure in one does not hide the others.
 - Search fuzzy matching is bounded, measurable, and does not degrade ordinary catalog browsing.
-- Search request throttling is implemented during Phase 6 hardening; Phase 3 bounds query size, page size, and fuzzy candidates.
+- Search request throttling is implemented at 60 requests/minute per hashed client IP; Phase 3 bounds query size, page size, and fuzzy candidates.
 - The specified palette and zero-radius geometry are applied consistently through reusable components.
 - Homepage and catalog grids render two columns on mobile, three on tablet, and five on desktop.
 

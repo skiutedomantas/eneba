@@ -343,3 +343,27 @@ The user approved Phase 5 and added three requirements: failed checkout must pre
 - Sodium support was confirmed in the PHP runtime.
 - Anonymous HTTP smoke checks returned `401` for checkout, order history, and key delivery. The fictional-key seed command rejected a production environment.
 
+## 2026-11-15 — Phase 6 hardening and deployment guidance
+
+### Request and approval
+
+The user approved Phase 6 hardening and requested an end-to-end registration-to-simulated-key-delivery test plus practical deployment instructions for the React frontend, PHP API, and MySQL database.
+
+### Changes
+
+- Added fixed-window throttling for login, registration, and search. Client IPs are hashed before persistence, and migration `004_search_rate_limit.php` extends the existing rate-limit action set.
+- Limited JSON request bodies to 16 KiB and added an explicit `413 REQUEST_TOO_LARGE` response.
+- Disabled displayed PHP errors, added defensive response headers, and changed API exception handling to return generic failures while logging request IDs and exception classes without exposing exception messages.
+- Enforced secure session cookies in production and made invalid cookie-security configuration fail explicitly.
+- Added a transactional user-journey test covering registration, authenticated CSRF use, cart addition, simulated checkout, order history, fictional key reveal, idempotent retry, logout, and rollback.
+- Added `docs/DEPLOYMENT.md` with runtime requirements, environment configuration, migrations/seeding, same-origin Nginx/PHP-FPM deployment, TLS, health checks, and key/database backup and restore guidance.
+- Updated the architecture, database, API, and implementation-plan documents to record the hardening and deployment behavior.
+
+### Validation
+
+- Backend endpoint and integration tests passed: `auth_cart_endpoints.php`, `catalog_endpoints.php`, `search_and_product_endpoints.php`, `checkout_orders.php`, `user_journey.php`, and `concurrent_checkout.php`.
+- PHP syntax checks passed across `backend/`.
+- Frontend `npm run build` (including TypeScript) and `npm run lint` passed.
+- `git diff --check` passed.
+- The local `/api/v1/health` endpoint returned HTTP 200 with database status `ok` and the expected defensive response headers.
+

@@ -60,12 +60,23 @@ final class SessionCookies
     private static function options(int $expiresAt, bool $httpOnly): array
     {
         $secureSetting = getenv('SESSION_COOKIE_SECURE');
-        $secure = $secureSetting === false
-            ? (
-                (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== '' && $_SERVER['HTTPS'] !== 'off')
-                || getenv('APP_ENV') === 'production'
-            )
-            : filter_var($secureSetting, FILTER_VALIDATE_BOOLEAN);
+        if ($secureSetting === false) {
+            $secure = isset($_SERVER['HTTPS'])
+                && $_SERVER['HTTPS'] !== ''
+                && $_SERVER['HTTPS'] !== 'off';
+        } else {
+            $secure = filter_var(
+                $secureSetting,
+                FILTER_VALIDATE_BOOLEAN,
+                FILTER_NULL_ON_FAILURE,
+            );
+            if ($secure === null) {
+                throw new \RuntimeException('SESSION_COOKIE_SECURE must be a boolean.');
+            }
+        }
+        if (getenv('APP_ENV') === 'production') {
+            $secure = true;
+        }
 
         return [
             'expires' => $expiresAt,

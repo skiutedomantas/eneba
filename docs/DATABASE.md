@@ -18,7 +18,7 @@ The following is a logical schema; migrations should define exact lengths, nulla
 |---|---|---|
 | `users` | `id`, `email` (unique), `password_hash`, `display_name`, `role`, `status`, timestamps | `role` is `customer` or a tightly controlled `admin`; `status` can disable access. |
 | `sessions` | `id`, `user_id`, `token_hash` (unique), `csrf_token_hash`, `expires_at`, `created_at`, `last_seen_at`, `revoked_at` | Store only a hash of the random cookie token. Session rows permit revocation and expiry. |
-| `auth_rate_limits` | `action`, `subject_hash`, `window_started_at`, `attempt_count`, `updated_at` | Per-IP fixed-window login/registration limits; store a hash of the client IP, not the raw address. |
+| `auth_rate_limits` | `action`, `subject_hash`, `window_started_at`, `attempt_count`, `updated_at` | Per-IP fixed-window login, registration, and search limits; store a hash of the client IP, not the raw address. |
 | `seller_profiles` | `id`, `user_id` (unique), `display_name`, `status`, timestamps | A seller is a user with a seller profile; approval/status is server controlled. |
 
 ### Catalog and offers
@@ -69,7 +69,7 @@ MySQL `FULLTEXT` over product name and description provides first-pass relevance
 
 - `users` 1—0..1 `seller_profiles`: customers may also have an approved seller profile.
 - `users` 1—many `sessions`: one user can have multiple devices/sessions; revocation is per session.
-- `auth_rate_limits` uses one row per authentication action and hashed client IP; it is operational state, not an identity relationship.
+- `auth_rate_limits` uses one row per action and hashed client IP; it is operational state, not an identity relationship.
 - `products` many—many `categories` through `product_categories`.
 - `products`, `seller_profiles`, `platforms`, and `regions` each have a one—many relationship to `offers`.
 - `offers` 1—many `digital_keys`: each key is stock for one specific offer.
@@ -89,6 +89,8 @@ Add indexes for:
 - Unique `carts.guest_token_hash`; `cart_items(cart_id, offer_id)` unique; `auth_rate_limits(action, subject_hash)` primary key; `orders(user_id, created_at)`; `order_items(order_id)`.
 - `product_categories(category_id, product_id)` and gram lookup `(gram, product_id)`.
 - A MySQL full-text index on active-search fields where supported by the chosen query design.
+
+The rate-limit action enum includes `login`, `register`, and `search`. A scheduled maintenance task should delete rows whose `window_started_at` is older than two days; counters are operational state and can be safely rebuilt.
 
 Use foreign-key deletion rules deliberately: restrict deletes for products/offers referenced in order history; soft-disable catalog and seller records instead. Cascading deletion is appropriate only for disposable derived data such as search grams.
 

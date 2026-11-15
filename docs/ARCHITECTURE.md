@@ -128,14 +128,15 @@ Reusable React components should own consistent styling and behavior: site heade
 - Serve the built SPA and `/api/v1` through HTTPS on the same origin. In development, use Vite's proxy to forward API requests to PHP.
 - Configure database credentials, session settings, a versioned digital-key encryption key ring, and environment-specific options through environment variables. Keep real secrets outside version control.
 - Return JSON for API responses, use UTC timestamps, and centralize error formatting and request IDs.
+- Limit JSON request bodies to 16 KiB and throttle search per hashed client IP.
 - Add migrations and deterministic seed data before relying on manually edited databases.
-- For production, disable verbose PHP errors in responses and log them server-side with request IDs.
+- For production, disable verbose PHP errors in responses, set secure cookies, and log exception classes with request IDs without request payloads or secrets.
 
 ## Authentication and cart
 
 The browser receives an opaque random session token in an `HttpOnly`, `SameSite=Lax` cookie. The API stores only its SHA-256 hash in `sessions`, enforces expiry/revocation on every protected request, and rotates the token after login or registration. A separate CSRF cookie/token is double-submitted in a request header and additionally bound to authenticated sessions by hash. Login and registration also require the bootstrapped anonymous CSRF token. Rate-limit counters use hashed client IPs and fixed windows.
 
-The React auth context loads the current user and cart count. The cart is intentionally available to anonymous visitors as well as signed-in users, so it is not wrapped in an auth guard. Checkout is the point where sign-in is required; that authorization must be enforced by both route UX and the checkout API, with the API as the security boundary.
+The React auth context loads the current user and cart count. The cart is intentionally available to anonymous visitors as well as signed-in users, so it is not wrapped in an auth guard. Checkout is the point where sign-in is required; that authorization must be enforced by both route UX and the checkout API, with the API as the security boundary. Registration/login are rate-limited to 5/hour and 10/15 minutes respectively; public search is limited to 60 requests/minute per hashed client IP.
 
 Anonymous carts are server-backed and keyed by a random HttpOnly guest cookie whose SHA-256 hash is stored in the database. Cart entries store only `cart_id`, selected `offer_id`, and quantity. Cart add/update validate current offer eligibility but do not consult digital-key inventory. Every cart read joins current offer data and recalculates totals from its current price; an offer that becomes inactive stays visible as unpriced and removable. On sign-in/registration, merge guest entries into the account cart transactionally and clear the guest cookie.
 
