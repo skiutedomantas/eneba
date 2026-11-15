@@ -24,38 +24,38 @@ $products = new ProductRepository($pdo);
 $search = new SearchService($products, new ProductSearchRepository($pdo));
 $details = new ProductDetailService($products);
 
-$exact = $search->search(['q' => 'Starlight Odyssey']);
+$exact = $search->search(['q' => 'Cyberpunk 2077']);
 expectSearch($exact['meta']['total'] === 1, 'Exact title search should find one product.');
 expectSearch(
-    $exact['data'][0]['slug'] === 'starlight-odyssey',
+    $exact['data'][0]['slug'] === 'cyberpunk-2077',
     'Exact title search returned the wrong product.',
 );
 
-$normalized = $search->search(['q' => '  ＳＴＡＲＬＩＧＨＴ   ODYSSEY  ']);
+$normalized = $search->search(['q' => '  ＣＹＢＥＲＰＵＮＫ   ２０７７  ']);
 expectSearch(
-    $normalized['data'][0]['slug'] === 'starlight-odyssey',
+    $normalized['data'][0]['slug'] === 'cyberpunk-2077',
     'Unicode compatibility normalization and whitespace collapse failed.',
 );
 expectSearch(
-    $normalized['meta']['q'] === 'starlight odyssey',
+    $normalized['meta']['q'] === 'cyberpunk 2077',
     'Search metadata should contain the normalized query.',
 );
 
-$partial = $search->search(['q' => 'starlight ody']);
+$partial = $search->search(['q' => 'cyberpunk 20']);
 expectSearch(
-    $partial['data'][0]['slug'] === 'starlight-odyssey',
+    $partial['data'][0]['slug'] === 'cyberpunk-2077',
     'Partial word search did not return the matching product.',
 );
 
-$typo = $search->search(['q' => 'starligt odyssey']);
+$typo = $search->search(['q' => 'cyberpun 2077']);
 expectSearch(
-    $typo['data'][0]['slug'] === 'starlight-odyssey',
+    $typo['data'][0]['slug'] === 'cyberpunk-2077',
     'Typo-tolerant search did not return the matching product.',
 );
 
-$midWordPartial = $search->search(['q' => 'light ody']);
+$midWordPartial = $search->search(['q' => 'berpunk 20']);
 expectSearch(
-    $midWordPartial['data'][0]['slug'] === 'starlight-odyssey',
+    $midWordPartial['data'][0]['slug'] === 'cyberpunk-2077',
     'Mid-word partial search did not return the matching product.',
 );
 
@@ -65,20 +65,20 @@ expectSearch(
     'A non-matching query should return an empty result.',
 );
 
-$filtered = $search->search(['q' => 'starlight', 'region' => 'eu']);
+$filtered = $search->search(['q' => 'cyberpunk', 'region' => 'eu']);
 expectSearch(
     $filtered['meta']['total'] === 1
         && $filtered['data'][0]['lowestOffer']['region']['code'] === 'eu',
     'Search filters should apply to the matching seller offer.',
 );
 
-$paged = $search->search(['q' => 'starlight', 'page' => '2', 'perPage' => '1']);
+$paged = $search->search(['q' => 'cyberpunk', 'page' => '2', 'perPage' => '1']);
 expectSearch(
     $paged['meta']['page'] === 2 && $paged['data'] === [],
     'Search pagination should use the filtered result count.',
 );
 
-$detail = $details->getBySlug('starlight-odyssey');
+$detail = $details->getBySlug('cyberpunk-2077');
 expectSearch($detail !== null, 'The active product detail should be present.');
 expectSearch(
     count($detail['data']['offers']) === 3,
@@ -94,8 +94,13 @@ expectSearch(
     'Offer comparison should identify each seller.',
 );
 expectSearch(
+    count(array_unique(array_column(array_column($detail['data']['offers'], 'platform'), 'code'))) === 2
+        && count(array_unique(array_column(array_column($detail['data']['offers'], 'region'), 'code'))) === 2,
+    'Seller offers should cover multiple platforms and regions.',
+);
+expectSearch(
     array_column($detail['data']['offers'], 'availableQuantity') === [0, 0, 0],
-    'Demo seller offers must not imply digital-key inventory.',
+    'Offer availability should reflect the current digital-key inventory.',
 );
 expectSearch(
     $details->getBySlug('missing-product') === null,
@@ -136,7 +141,7 @@ try {
 
     $inactive = $pdo->prepare(
         "INSERT INTO products (slug, name, description, status)
-         VALUES ('phase3-inactive-product', 'Hidden Starlight', 'Inactive test product', 'inactive')",
+         VALUES ('phase3-inactive-product', 'Hidden Cyberpunk', 'Inactive test product', 'inactive')",
     );
     $inactive->execute();
     expectSearch(

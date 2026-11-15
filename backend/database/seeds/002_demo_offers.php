@@ -7,7 +7,9 @@ return static function (\PDO $pdo): void {
         $user = $pdo->prepare(
             'INSERT INTO users (email, password_hash, display_name, role, status)
              VALUES (:email, :password_hash, :display_name, \'customer\', \'disabled\')
-             ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)',
+             ON DUPLICATE KEY UPDATE
+                id = LAST_INSERT_ID(id),
+                display_name = VALUES(display_name)',
         );
         $user->execute([
             'email' => $email,
@@ -24,7 +26,10 @@ return static function (\PDO $pdo): void {
         $seller = $pdo->prepare(
             'INSERT INTO seller_profiles (user_id, display_name, status)
              VALUES (:user_id, :display_name, \'approved\')
-             ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)',
+             ON DUPLICATE KEY UPDATE
+                id = LAST_INSERT_ID(id),
+                display_name = VALUES(display_name),
+                status = \'approved\'',
         );
         $seller->execute([
             'user_id' => $userId,
@@ -42,20 +47,99 @@ return static function (\PDO $pdo): void {
         return $sellerId;
     };
 
-    $sellerIds = [
-        'catalog-seller@example.invalid' => $sellerIdFor(
-            'catalog-seller@example.invalid',
-            'Catalog Demo Seller',
-        ),
-        'compare-seller@example.invalid' => $sellerIdFor(
-            'compare-seller@example.invalid',
-            'Compare Demo Seller',
-        ),
-        'regional-seller@example.invalid' => $sellerIdFor(
-            'regional-seller@example.invalid',
-            'Regional Demo Seller',
-        ),
+    $sellerIds = [];
+    foreach ([
+        ['catalog-seller@example.invalid', 'Pixel Vault'],
+        ['compare-seller@example.invalid', 'Arcade Exchange'],
+        ['regional-seller@example.invalid', 'Northstar Digital'],
+        ['key-haven@example.invalid', 'Key Haven'],
+        ['gamegrid@example.invalid', 'GameGrid'],
+    ] as [$email, $displayName]) {
+        $sellerIds[$email] = $sellerIdFor($email, $displayName);
+    }
+
+    $legacyOffers = $pdo->query(<<<'SQL'
+SELECT offer.id, product.slug AS product_slug, account.email AS seller_email
+FROM offers AS offer
+JOIN products AS product ON product.id = offer.product_id
+JOIN seller_profiles AS seller ON seller.id = offer.seller_id
+JOIN users AS account ON account.id = seller.user_id
+WHERE product.slug IN ('starlight-odyssey', 'iron-harbor', 'wildwood-trail')
+ORDER BY offer.id
+SQL)->fetchAll();
+    $legacyOfferTarget = [
+        'catalog-seller@example.invalid' => [
+            'starlight-odyssey' => ['cyberpunk-2077', 'pc', 'global'],
+            'iron-harbor' => ['baldurs-gate-3', 'playstation-5', 'eu'],
+            'wildwood-trail' => ['stardew-valley', 'pc', 'us'],
+        ],
+        'compare-seller@example.invalid' => [
+            'starlight-odyssey' => ['cyberpunk-2077', 'pc', 'global'],
+        ],
+        'regional-seller@example.invalid' => [
+            'starlight-odyssey' => ['cyberpunk-2077', 'xbox-series', 'eu'],
+        ],
     ];
+    $legacyOfferUsage = $pdo->prepare(<<<'SQL'
+SELECT
+    EXISTS (SELECT 1 FROM digital_keys WHERE offer_id = :key_offer_id) AS has_keys,
+    EXISTS (SELECT 1 FROM order_items WHERE offer_id = :order_offer_id) AS has_orders,
+    EXISTS (SELECT 1 FROM cart_items WHERE offer_id = :cart_offer_id) AS has_cart_items
+SQL);
+    $moveLegacyOffer = $pdo->prepare(<<<'SQL'
+UPDATE offers
+SET product_id = (SELECT id FROM products WHERE slug = :product_slug),
+    platform_id = (SELECT id FROM platforms WHERE code = :platform_code),
+    region_id = (SELECT id FROM regions WHERE code = :region_code)
+WHERE id = :offer_id
+SQL);
+
+    foreach ($legacyOffers as $legacyOffer) {
+        $offerId = (int) $legacyOffer['id'];
+        $legacyOfferUsage->execute([
+            'key_offer_id' => $offerId,
+            'order_offer_id' => $offerId,
+            'cart_offer_id' => $offerId,
+        ]);
+        $usage = $legacyOfferUsage->fetch();
+        if (
+            (int) $usage['has_keys'] !== 0
+            || (int) $usage['has_orders'] !== 0
+            || (int) $usage['has_cart_items'] !== 0
+        ) {
+            throw new \RuntimeException(
+                'Cannot reassign a fictional demo offer that has keys, orders, or cart items.',
+            );
+        }
+
+        $target = $legacyOfferTarget[$legacyOffer['seller_email']][$legacyOffer['product_slug']]
+            ?? null;
+        if ($target === null) {
+            throw new \RuntimeException('A fictional demo offer has no real-game reassignment.');
+        }
+
+        [$productSlug, $platformCode, $regionCode] = $target;
+        $moveLegacyOffer->execute([
+            'product_slug' => $productSlug,
+            'platform_code' => $platformCode,
+            'region_code' => $regionCode,
+            'offer_id' => $offerId,
+        ]);
+    }
+
+    $remainingLegacyOffers = (int) $pdo->query(<<<'SQL'
+SELECT COUNT(*)
+FROM offers AS offer
+JOIN products AS product ON product.id = offer.product_id
+WHERE product.slug IN ('starlight-odyssey', 'iron-harbor', 'wildwood-trail')
+SQL)->fetchColumn();
+    if ($remainingLegacyOffers !== 0) {
+        throw new \RuntimeException('Fictional demo products still have seller offers.');
+    }
+    $pdo->exec(
+        "DELETE FROM products
+         WHERE slug IN ('starlight-odyssey', 'iron-harbor', 'wildwood-trail')",
+    );
 
     $offer = $pdo->prepare(<<<'SQL'
 INSERT INTO offers (
@@ -89,26 +173,27 @@ WHERE product.slug = :product_slug
         AND existing.platform_id = platform.id
         AND existing.region_id = region.id
         AND existing.currency = 'EUR'
+        AND existing.status = 'active'
   )
 SQL);
 
     foreach ([
         [
-            'product_slug' => 'starlight-odyssey',
+            'product_slug' => 'cyberpunk-2077',
             'platform_code' => 'pc',
             'region_code' => 'global',
             'price_minor' => 1899,
             'compare_at_price_minor' => 4999,
         ],
         [
-            'product_slug' => 'iron-harbor',
+            'product_slug' => 'baldurs-gate-3',
             'platform_code' => 'playstation-5',
             'region_code' => 'eu',
             'price_minor' => 2499,
             'compare_at_price_minor' => 4499,
         ],
         [
-            'product_slug' => 'wildwood-trail',
+            'product_slug' => 'stardew-valley',
             'platform_code' => 'pc',
             'region_code' => 'us',
             'price_minor' => 1299,
@@ -129,7 +214,7 @@ SQL);
     foreach ([
         [
             'seller_id' => $sellerIds['compare-seller@example.invalid'],
-            'product_slug' => 'starlight-odyssey',
+            'product_slug' => 'cyberpunk-2077',
             'platform_code' => 'pc',
             'region_code' => 'global',
             'price_minor' => 2199,
@@ -137,8 +222,8 @@ SQL);
         ],
         [
             'seller_id' => $sellerIds['regional-seller@example.invalid'],
-            'product_slug' => 'starlight-odyssey',
-            'platform_code' => 'pc',
+            'product_slug' => 'cyberpunk-2077',
+            'platform_code' => 'xbox-series',
             'region_code' => 'eu',
             'price_minor' => 2499,
             'compare_at_price_minor' => null,
@@ -153,5 +238,141 @@ SQL);
             'product_slug' => $values['product_slug'],
             'existing_seller_id' => $values['seller_id'],
         ]);
+    }
+
+    $sellerEmails = array_keys($sellerIds);
+    $sellerIdsForProductQuery = $pdo->prepare(<<<'SQL'
+SELECT seller_id
+FROM offers
+WHERE product_id = (SELECT id FROM products WHERE slug = :product_slug)
+  AND status = 'active'
+SQL);
+    $activeOfferCountQuery = $pdo->prepare(<<<'SQL'
+SELECT COUNT(*)
+FROM offers
+WHERE product_id = (SELECT id FROM products WHERE slug = :product_slug)
+  AND status = 'active'
+SQL);
+    $additionalOffers = [
+        'minecraft' => [[2299, 3999], [2599, 3999]],
+        'grand-theft-auto-v' => [[1999, 2999], [2299, 2999]],
+        'red-dead-redemption-2' => [[2499, 5999], [2999, 5999]],
+        'the-witcher-3-wild-hunt' => [[1499, 3999], [1999, 3999]],
+        'elden-ring' => [[3999, 5999], [4499, 5999]],
+        'baldurs-gate-3' => [[4499, 5999], [4999, 5999]],
+        'hogwarts-legacy' => [[2999, 5999], [3499, 5999]],
+        'helldivers-2' => [[2999, 3999], [3499, 3999]],
+        'palworld' => [[2299, 2999], [2699, 2999]],
+        'stardew-valley' => [[999, 1499], [1199, 1499]],
+        'terraria' => [[749, 999], [849, 999]],
+        'rust' => [[2799, 3999], [3299, 3999]],
+        'dead-by-daylight' => [[1499, 2999], [1999, 2999]],
+        'resident-evil-4' => [[2499, 3999], [2999, 3999]],
+        'monster-hunter-wilds' => [[4999, 6999], [5499, 6999]],
+        'forza-horizon-5' => [[2999, 5999], [3499, 5999]],
+        'sea-of-thieves' => [[1999, 3999], [2499, 3999]],
+        'marvels-spider-man-remastered' => [[2999, 5999], [3499, 5999]],
+        'god-of-war' => [[1999, 3999], [2499, 3999]],
+        'ghost-of-tsushima-directors-cut' => [[3499, 5999], [3999, 5999]],
+        'final-fantasy-vii-rebirth' => [[4999, 6999], [5499, 6999]],
+        'hades' => [[1599, 2499], [1999, 2499]],
+        'hollow-knight-silksong' => [[1699, 1999], [1899, 1999]],
+        'black-myth-wukong' => [[3999, 5999], [4499, 5999]],
+        'assassins-creed-shadows' => [[4999, 6999], [5499, 6999]],
+        'sid-meiers-civilization-vi' => [[599, 2999], [999, 2999]],
+        'dragons-dogma-2' => [[2999, 5999], [3499, 5999]],
+        'the-elder-scrolls-v-skyrim-special-edition' => [[999, 3999], [1499, 3999]],
+        'death-stranding-directors-cut' => [[1999, 3999], [2499, 3999]],
+    ];
+    $platformSpecificQuotes = [
+        'minecraft' => ['xbox-series', 'us', 2799, 3999],
+        'grand-theft-auto-v' => ['xbox-series', 'us', 2199, 2999],
+        'red-dead-redemption-2' => ['xbox-series', 'eu', 2799, 5999],
+        'elden-ring' => ['playstation-5', 'eu', 4299, 5999],
+        'hogwarts-legacy' => ['playstation-5', 'eu', 3199, 5999],
+        'helldivers-2' => ['playstation-5', 'eu', 3199, 3999],
+        'monster-hunter-wilds' => ['playstation-5', 'eu', 5299, 6999],
+        'forza-horizon-5' => ['xbox-series', 'us', 3199, 5999],
+        'ghost-of-tsushima-directors-cut' => ['playstation-5', 'eu', 3799, 5999],
+        'assassins-creed-shadows' => ['xbox-series', 'eu', 5299, 6999],
+    ];
+    $quoteIndex = 0;
+    foreach ($additionalOffers as $productSlug => $quotes) {
+        $sellerIdsForProductQuery->execute(['product_slug' => $productSlug]);
+        $usedSellerIds = array_map(
+            'intval',
+            $sellerIdsForProductQuery->fetchAll(\PDO::FETCH_COLUMN),
+        );
+        $activeOfferCountQuery->execute(['product_slug' => $productSlug]);
+        $activeOfferCount = (int) $activeOfferCountQuery->fetchColumn();
+
+        foreach ($quotes as $quoteNumber => [$priceMinor, $compareAtPriceMinor]) {
+            if (
+                $activeOfferCount >= 3
+                || ($activeOfferCount >= 2 && count(array_unique($usedSellerIds)) >= 2)
+            ) {
+                break;
+            }
+
+            if ($quoteNumber === 1 && isset($platformSpecificQuotes[$productSlug])) {
+                [
+                    $platformCode,
+                    $regionCode,
+                    $priceMinor,
+                    $compareAtPriceMinor,
+                ] = $platformSpecificQuotes[$productSlug];
+            } else {
+                $platformCode = 'pc';
+                $regionCode = 'global';
+            }
+
+            $availableSellerEmails = array_values(array_filter(
+                $sellerEmails,
+                static fn (string $email): bool => !in_array(
+                    $sellerIds[$email],
+                    $usedSellerIds,
+                    true,
+                ),
+            ));
+            if ($availableSellerEmails === []) {
+                throw new \RuntimeException(
+                    'No distinct seller is available for an additional game offer.',
+                );
+            }
+            $sellerEmail = $availableSellerEmails[$quoteIndex % count($availableSellerEmails)];
+            $sellerId = $sellerIds[$sellerEmail];
+            $offer->execute([
+                'seller_id' => $sellerId,
+                'price_minor' => $priceMinor,
+                'compare_at_price_minor' => $compareAtPriceMinor,
+                'platform_code' => $platformCode,
+                'region_code' => $regionCode,
+                'product_slug' => $productSlug,
+                'existing_seller_id' => $sellerId,
+            ]);
+            if ($offer->rowCount() > 0) {
+                $usedSellerIds[] = $sellerId;
+                $activeOfferCount++;
+            }
+            $quoteIndex++;
+        }
+    }
+
+    $invalidOfferCoverage = (int) $pdo->query(<<<'SQL'
+SELECT COUNT(*)
+FROM (
+    SELECT product.id
+    FROM products AS product
+    LEFT JOIN offers AS offer
+      ON offer.product_id = product.id AND offer.status = 'active'
+    WHERE product.status = 'active'
+    GROUP BY product.id
+    HAVING COUNT(offer.id) < 2
+        OR COUNT(offer.id) > 3
+        OR COUNT(DISTINCT offer.seller_id) < 2
+) AS invalid_coverage
+SQL)->fetchColumn();
+    if ($invalidOfferCoverage !== 0) {
+        throw new \RuntimeException('Every active game must have two or three distinct-seller offers.');
     }
 };

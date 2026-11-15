@@ -6,20 +6,12 @@ import { ResourceFeedback } from '../components/ui/ResourceFeedback'
 import { SectionPanel } from '../components/ui/SectionPanel'
 import { useApiResource } from '../hooks/useApiResource'
 import { getProductDetail } from '../lib/api/catalog'
-import type { ProductDetailOffer } from '../types/catalog'
 
 function formatPrice(amountMinor: number, currency: string): string {
   return new Intl.NumberFormat(undefined, {
     style: 'currency',
     currency,
   }).format(amountMinor / 100)
-}
-
-function offerAvailability(offer: ProductDetailOffer): string {
-  if (offer.availableQuantity === 0) {
-    return 'Out of stock'
-  }
-  return `${offer.availableQuantity} available`
 }
 
 function ProductDetailPage() {
@@ -96,16 +88,13 @@ function ProductDetailPage() {
                     <p className="mt-3 text-2xl font-black">
                       {formatPrice(selectedOffer.priceMinor, selectedOffer.currency)}
                     </p>
-                    <p className="mt-1 text-sm font-bold text-region">
-                      {offerAvailability(selectedOffer)}
-                    </p>
                   </div>
                 ) : null}
               </div>
             </section>
 
             <SectionPanel
-              description="Compare seller, current price, platform, region, and live key availability before choosing an offer."
+              description="Compare seller prices, platforms, regions, and discounts."
               eyebrow="Offer comparison"
               id="seller-offers"
               title={`Compare offers (${result.offers.length})`}
@@ -124,7 +113,7 @@ function ProductDetailPage() {
                       <li key={offer.offerId}>
                         <button
                           aria-pressed={selected}
-                          className={`grid w-full gap-3 border p-4 text-left transition-colors md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_auto] md:items-center ${
+                          className={`grid w-full gap-3 border p-4 text-left transition-colors md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,0.9fr)] md:items-center ${
                             selected
                               ? 'border-savings bg-card'
                               : 'border-outline bg-card hover:border-text'
@@ -173,15 +162,6 @@ function ProductDetailPage() {
                             <span className="mt-1 block font-bold text-region">
                               {offer.region.name}
                             </span>
-                          </span>
-                          <span
-                            className={`text-sm font-black ${
-                              offer.availableQuantity > 0
-                                ? 'text-savings'
-                                : 'text-muted'
-                            }`}
-                          >
-                            {offerAvailability(offer)}
                           </span>
                         </button>
                       </li>

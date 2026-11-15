@@ -15,7 +15,9 @@
 
 Phases 2B and 3 implement the health check, product catalog and reference-data lookups, four independent homepage endpoints, product search, and product detail with seller-offer comparison. Authentication, registration, login/logout, cart, checkout, orders, and digital-key delivery remain future-phase contracts.
 
-An empty result is a successful response (`200`) with `"data": []`. The API does not invent sales or inventory to populate a section. In particular, best sellers require completed orders in the recent period, and special deals require available digital-key inventory. The current demo seed intentionally creates neither.
+An empty result is a successful response (`200`) with `"data": []`. The API does not invent sales or inventory to populate a section. The current seed contains 30 active games and 61 active seller offers, with two or three offers per game. It creates no completed orders or digital keys, so best sellers and popular categories remain empty and special deals remain key-inventory-gated.
+
+Products span 11 categories. Offers use five seller profiles, EUR prices, compare-at prices, PC/PlayStation 5/Xbox Series X|S, and Global/Europe/United States regions. The catalog and product comparison pages do not display inventory status labels; the API still reports key availability for backend flows. Game cover references are deferred, so seeded products currently return `imageUrl: null`.
 
 ## Health
 
@@ -79,6 +81,8 @@ Each accepts optional `limit` (integer, range `1..20`; default `3` for hero bann
 }
 ```
 
+The following response snippets show the response shape; example IDs, amounts, sales, and inventory are not current seed values.
+
 `GET /home/best-sellers` response:
 
 ```json
@@ -86,9 +90,9 @@ Each accepts optional `limit` (integer, range `1..20`; default `3` for hero bann
   "data": [
     {
       "id": 1,
-      "slug": "starlight-odyssey",
-      "name": "Starlight Odyssey",
-      "description": "A fictional role-playing adventure.",
+      "slug": "example-game",
+      "name": "Example Game",
+      "description": "Example product description.",
       "imageUrl": null,
       "unitsSold": 12,
       "lowestOffer": {
@@ -116,8 +120,8 @@ Each accepts optional `limit` (integer, range `1..20`; default `3` for hero bann
       "offerId": 1,
       "product": {
         "id": 1,
-        "slug": "starlight-odyssey",
-        "name": "Starlight Odyssey",
+        "slug": "example-game",
+        "name": "Example Game",
         "imageUrl": null
       },
       "priceMinor": 1899,
@@ -177,9 +181,9 @@ Paginated response:
   "data": [
     {
       "id": 1,
-      "slug": "starlight-odyssey",
-      "name": "Starlight Odyssey",
-      "description": "A fictional role-playing adventure.",
+      "slug": "example-game",
+      "name": "Example Game",
+      "description": "Example product description.",
       "imageUrl": null,
       "lowestOffer": {
         "offerId": 1,
@@ -193,7 +197,7 @@ Paginated response:
       }
     }
   ],
-  "meta": { "page": 1, "perPage": 20, "total": 3, "sort": "newest", "currency": "EUR" }
+  "meta": { "page": 1, "perPage": 20, "total": 30, "sort": "newest", "currency": "EUR" }
 }
 ```
 
@@ -228,10 +232,10 @@ Search response:
   "data": [
     {
       "id": 1,
-      "slug": "starlight-odyssey",
-      "name": "Starlight Odyssey",
-      "description": "A fictional role-playing adventure.",
-      "imageUrl": "/images/starlight-odyssey.svg",
+      "slug": "example-game",
+      "name": "Example Game",
+      "description": "Example product description.",
+      "imageUrl": null,
       "lowestOffer": {
         "offerId": 1,
         "priceMinor": 1899,
@@ -245,7 +249,7 @@ Search response:
     }
   ],
   "meta": {
-    "q": "starlight ody",
+    "q": "example game",
     "page": 1,
     "perPage": 20,
     "total": 1,
@@ -259,22 +263,22 @@ Search response:
 
 `meta.total` describes the filtered, ranked results in the bounded scored set. `capped` is true when 100 eligible scoring candidates (or the 1,000-result lexical pool) are reached; in that case, more matches may exist beyond this page set. Invalid or too-short queries return `422 VALIDATION_ERROR`; an unmatched query returns `200` with empty `data`. Search-specific request rate limiting is deferred to Phase 6; query length, pagination, and candidate count are bounded in this phase.
 
-`GET /products/{slug}` returns `404 NOT_FOUND` when the product is missing or inactive. Only active products and active offers from approved sellers with active platform/region options are exposed. Offers include zero-stock rows so availability is explicit and are grouped by currency, then ordered by price and offer ID within each currency; amounts in different currencies are not treated as directly comparable. A product with no qualifying offers returns an empty `offers` list.
+`GET /products/{slug}` returns `404 NOT_FOUND` when the product is missing or inactive. Only active products and active offers from approved sellers with active platform/region options are exposed. Offers include an `availableQuantity` value derived from digital-key records and are grouped by currency, then ordered by price and offer ID within each currency; amounts in different currencies are not treated as directly comparable. A product with no qualifying offers returns an empty `offers` list. The frontend does not show availability labels.
 
 ```json
 {
   "data": {
     "product": {
       "id": 1,
-      "slug": "starlight-odyssey",
-      "name": "Starlight Odyssey",
-      "description": "A fictional role-playing adventure.",
-      "imageUrl": "/images/starlight-odyssey.svg"
+      "slug": "example-game",
+      "name": "Example Game",
+      "description": "Example product description.",
+      "imageUrl": null
     },
     "offers": [
       {
         "offerId": 1,
-        "seller": { "id": 1, "name": "Catalog Demo Seller" },
+        "seller": { "id": 1, "name": "Pixel Vault" },
         "priceMinor": 1899,
         "compareAtPriceMinor": 4999,
         "currency": "EUR",
@@ -285,7 +289,7 @@ Search response:
       },
       {
         "offerId": 4,
-        "seller": { "id": 2, "name": "Compare Demo Seller" },
+        "seller": { "id": 2, "name": "Arcade Exchange" },
         "priceMinor": 2199,
         "compareAtPriceMinor": 3999,
         "currency": "EUR",
@@ -300,6 +304,8 @@ Search response:
 ```
 
 The browser can select an offer for display, but does not reserve inventory or create a cart in Phase 3.
+
+The catalog and product detail UI show seller pricing, platform, region, and discounts without displaying inventory status labels.
 
 This hybrid is practical without another service at early scale. If catalog size, language requirements, or search latency outgrow it, migrate search behind the same endpoint to a dedicated engine such as Meilisearch or OpenSearch.
 
@@ -331,5 +337,5 @@ Set key-response cache headers to `Cache-Control: no-store`; do not include keys
 
 ## Admin and seller operations
 
-Admin catalog, banner, seller moderation, offer management, and key upload endpoints are deliberately not part of the customer MVP contract. If required for a usable seeded demo, add narrowly authorized admin routes in a separate phase. Never expose bulk key data in ordinary seller/catalog endpoints.
+Admin catalog, banner, seller moderation, offer management, and key upload endpoints are deliberately not part of the customer MVP contract. If required for a usable seeded setup, add narrowly authorized admin routes in a separate phase. Never expose bulk key data in ordinary seller/catalog endpoints.
 

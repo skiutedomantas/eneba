@@ -71,9 +71,6 @@ function ProductCard({ product }: ProductCardProps) {
                 <p className="text-lg font-black text-text">
                   {formatPrice(offer.priceMinor, offer.currency)}
                 </p>
-                {offer.availableQuantity === 0 ? (
-                  <p className="text-xs font-bold text-muted">Out of stock</p>
-                ) : null}
               </div>
             ) : (
               <p className="text-sm font-bold text-muted">No active offers</p>

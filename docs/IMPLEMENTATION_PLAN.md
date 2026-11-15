@@ -7,7 +7,7 @@ Build a thin vertical slice early, then extend it with tested business flows. Ke
 ## Phase 0 — Confirm boundaries
 
 - Review and approve the architecture and assumptions in these documents.
-- Confirm MVP deployment origin, currencies, seller/admin scope, and how demo users and inventory will be seeded.
+- Confirm MVP deployment origin, currencies, seller/admin scope, and how local seed users and inventory will be configured.
 - Keep checkout explicitly simulated. Decide separately before adding any real payment integration.
 
 **Exit:** agreed scope and architecture; no app stack initialized before approval.
@@ -16,7 +16,7 @@ Build a thin vertical slice early, then extend it with tested business flows. Ke
 
 - Initialize React/TypeScript/Vite/Tailwind/React Router and the PHP API only after approval.
 - Add environment configuration examples, PHP front controller, API response/error conventions, and same-origin local proxy configuration.
-- Add MySQL migrations for identity, catalog, offers, cart, orders, encrypted key inventory, and banners; seed reproducible demo data.
+- Add MySQL migrations for identity, catalog, offers, cart, orders, encrypted key inventory, and banners; add reproducible seed data.
 - Add smoke tests for API startup, DB connection, migrations, and health/status endpoint.
 
 **Exit:** repeatable local setup and migrations; no secrets committed.
@@ -41,7 +41,7 @@ Build a thin vertical slice early, then extend it with tested business flows. Ke
 - Implement `GET /products`, `GET /categories`, `GET /platforms`, `GET /regions`, and the four independent homepage endpoints. Document every implemented endpoint and response format in `docs/API.md`.
 - Connect catalog filter, sort, price range, and pagination controls to the API; keep each homepage section's loading, error, retry, and empty states independent.
 - Build the responsive homepage and catalog using the shared components: large rectangular promotional banners, clearly separated sections, and dense dark product cards with artwork, prices, discounts, and region labels.
-- Seed fictional products, a disabled demo seller, price-bearing offers without digital keys, and an original banner asset. Do not seed completed orders or pretend inventory exists; best sellers, popular categories, and in-stock special deals stay empty until their qualifying data exists.
+- Seed 30 active game listings across varied categories, five seller profiles, and 61 EUR offers (two or three per game) with platform, region, and compare-at price variation. Keep cover image references deferred until IGDB assets can be retrieved; do not seed completed orders or digital keys. Best sellers, popular categories, and key-backed special deals stay empty until their qualifying data exists.
 - Keep authentication, checkout, orders, and digital-key delivery out of this phase.
 - Add request validation and focused API tests for filters, paging, empty states, and inactive records.
 
@@ -52,12 +52,12 @@ Build a thin vertical slice early, then extend it with tested business flows. Ke
 - Implement `GET /search` using Unicode-normalized input, MySQL FULLTEXT natural/prefix matching, a bounded gram-index fallback, and relevance-first pagination. Apply catalog filters before scoring no more than 100 candidates.
 - Maintain the derived name-gram index during seeding and provide an explicit rebuild command for catalog name/status changes. Cap fuzzy candidates at 100; defer search request rate limiting to Phase 6.
 - Implement `GET /products/{slug}` with active product details and active offers from approved sellers, including seller, platform, region, compare-at/current price, discount, and available inventory.
-- Add distinct fictional sellers and comparable offers for demo product detail pages without adding digital keys or implying stock.
+- Maintain multiple seller profiles and comparable offers on active game products. Product cards and comparison pages show price, platform, region, and discounts without inventory status labels.
 - Connect the global search bar to a URL-backed results page with loading, error, empty, retry, filter, and pagination states. Make product cards link to detail pages.
-- Build a seller comparison view where price, seller, platform, region, and stock status are visible together; allow a customer to select an offer for display without implementing cart/checkout behavior.
+- Build a seller comparison view where price, seller, platform, region, and discounts are visible together without inventory status labels; allow a customer to select an offer for display without implementing cart/checkout behavior.
 - Document API request/response contracts and the search index lifecycle. Test exact, partial, typo, no-result, validation, filters, pagination, candidate bounds, product not-found, seller ordering, and inactive records.
 
-**Exit:** exact, partial, and typo-tolerant queries return relevant active products within the candidate bound; product details clearly compare active seller offers and their region and availability without implying inventory that is not present.
+**Exit:** exact, partial, and typo-tolerant queries return relevant active products within the candidate bound; product details clearly compare active seller prices, platforms, and regions.
 
 ## Phase 4 — Authentication and cart
 

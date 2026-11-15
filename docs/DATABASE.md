@@ -52,6 +52,10 @@ Best sellers, special deals, and popular categories are computed from order/offe
 
 An offer qualifies as a special deal only when it is active, within its configured deal window, has available key inventory, and has a non-null `compare_at_price_minor` greater than `price_minor`. Calculate the discount from the two integer amounts in the same currency; do not persist a separate percentage that can become stale. Treat a null comparison price (or one not greater than the selling price) as no advertised discount.
 
+The repeatable catalog seed creates 30 active games across 11 categories and 61 active offers, with two offers per game except for Cyberpunk 2077, which has three. Five seller profiles provide EUR price comparisons using PC, PlayStation 5, Xbox Series X|S, and Global, Europe, and United States regions. The five existing offer rows are retained; the seed adds offers only as needed to provide two or three offers per game, making it safe to rerun against an already populated catalog. It does not create order or digital-key rows. The frontend hides availability labels, while the API and future checkout logic continue to use actual digital-key inventory. The seed aborts rather than repurposing a legacy offer if it has keys, order items, or cart items.
+
+`products.image_url` is nullable and already supports external HTTPS references. Game cover references are deferred; products currently have no cover images. The intended source is IGDB's [cover image API](https://api-docs.igdb.com/#images), with visible attribution and rights confirmation before any commercial deployment. No IGDB credentials belong in the repository or runtime application.
+
 ### Search support
 
 | Table | Important columns | Notes |

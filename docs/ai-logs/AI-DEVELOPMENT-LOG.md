@@ -186,3 +186,54 @@ The user approved Phase 3 after reviewing the existing docs, frontend, API, and 
 - Authentication, cart, checkout, orders, and digital-key delivery remain unimplemented.
 - Product offer selection is presentational only; no inventory is reserved and no purchase action is exposed.
 
+## 2026-11-14 — Real-game catalog refresh
+
+### Request and approval
+
+The user approved replacing the three fictional demo products with 30 real games, deleting the old products, reassigning and preserving the five demo offers, and using varied categories, platforms, and regions. IGDB cover references were requested, then deferred by the user until image access is available.
+
+### Work performed
+
+- Replaced the fictional product seed with 30 active game titles across 11 categories. Every seeded product has category mappings; the existing PC, PlayStation 5, and Xbox Series platform options and Global, Europe, and United States regions remain active.
+- Reassigned the five existing demo offers to Cyberpunk 2077, Baldur's Gate 3, and Stardew Valley while preserving offer records and their sample price/compare-at values. The offers cover all three platform options and regions.
+- Added seed guards that refuse to repurpose legacy offers with keys, order items, or cart items, then delete the old fictional product rows after offer reassignment.
+- Removed the unused fictional SVG covers. All new products currently have `image_url = NULL`, as requested; IGDB references and attribution are deferred until credentials/image access are available.
+- Removed user-facing demo-price and inventory-status labels from product cards and product details; backend inventory availability remains unchanged.
+- Updated catalog/search tests and the API, database, and implementation-plan documentation.
+
+### Validation
+
+- Ran `php backend/bin/seed.php` twice. The second run remained idempotent.
+- Database checks confirmed 30 active products, 11 used categories, five active offers across three games, three platforms, and three regions, no fictional products, no keys or orders, and no uncategorized products.
+- `php backend/tests/catalog_endpoints.php` and `php backend/tests/search_and_product_endpoints.php` passed.
+- PHP syntax checks, frontend production build, Oxlint, and `git diff --check` passed.
+
+### Scope notes
+
+- Cover image URLs are intentionally absent pending IGDB access; no credentials or runtime IGDB dependency were added.
+- Demo offer prices are illustrative, and all offer inventory remains zero.
+
+## 2026-11-15 — Expanded seller offers
+
+### Request and approval
+
+The user requested two or three offers for every active game, preservation of the existing five offers, varied sellers/prices/platforms/regions, and no inventory-status labels in the UI while retaining backend inventory rules.
+
+### Work performed
+
+- Retained the existing five offer rows and added 56 more on a clean seed, resulting in 61 active offers across 30 products. Every product has two or three offers from at least two sellers; on reruns, the seed adds offers only where coverage is missing.
+- Added two seller profiles and assigned neutral seller names to all five profiles. Offers use EUR, compare-at prices, and a mix of PC, PlayStation 5, Xbox Series X|S, Global, Europe, and United States.
+- Removed inventory-status text from product cards and product details; backend availability and special-deal inventory rules remain unchanged.
+- Updated catalog/search tests and the current API, database, and implementation-plan documentation.
+
+### Validation
+
+- Repeated the seed and verified it creates no duplicate offers, including against a database already containing 61 active offers.
+- Database checks confirmed 61 active offers, two or three offers per active game, multiple sellers per game, discounts, three platforms, three regions, and no missing catalog coverage.
+- Backend integration tests, PHP syntax checks, frontend production build, Oxlint, and `git diff --check` passed.
+
+### Scope notes
+
+- No digital-key records were added. Availability remains derived from key inventory in the backend; the frontend does not show availability labels.
+- Cover references remain deferred until IGDB access is available.
+
