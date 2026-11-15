@@ -1,3 +1,6 @@
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+
 export interface ApiListResponse<T> {
   data: T
   meta: Record<string, number | string>
@@ -55,8 +58,8 @@ async function responseJson<T>(response: Response): Promise<T> {
 }
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(path, {
-    credentials: 'same-origin',
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    credentials: 'include',
     headers: { Accept: 'application/json' },
     signal,
   })
@@ -71,9 +74,9 @@ async function sendJson<T>(
   csrfToken: string,
   additionalHeaders: Record<string, string> = {},
 ): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
-    credentials: 'same-origin',
+    credentials: 'include',
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
