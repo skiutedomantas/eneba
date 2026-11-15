@@ -12,4 +12,4 @@ COPY backend/ ./backend/
 
 EXPOSE 10000
 
-CMD ["sh", "-c", "php backend/bin/migrate.php && exec php -S 0.0.0.0:${PORT:-10000} -t backend/public backend/public/router.php"]
+CMD ["sh", "-c", "php backend/bin/migrate.php && php backend/bin/seed.php && exec php -S 0.0.0.0:${PORT:-10000} -t backend/public backend/public/router.php"]
