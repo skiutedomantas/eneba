@@ -33,9 +33,10 @@ header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
 
 set_exception_handler(static function (\Throwable $exception) use ($requestId): void {
     error_log(json_encode([
-        'requestId' => $requestId,
-        'exception' => $exception::class,
-    ], JSON_UNESCAPED_SLASHES));
+    'requestId' => $requestId,
+    'exception' => $exception::class,
+    'message' => $exception->getMessage(),
+], JSON_UNESCAPED_SLASHES));
 
     JsonResponse::send(500, [
         'error' => [
