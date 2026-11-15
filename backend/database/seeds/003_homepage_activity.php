@@ -2,23 +2,20 @@
 
 declare(strict_types=1);
 
+use App\Database\SqlDialect;
+
 return static function (\PDO $pdo): void {
-    $account = $pdo->prepare(
-        'INSERT INTO users (email, password_hash, display_name, role, status)
+    $accountSql = 'INSERT INTO users (email, password_hash, display_name, role, status)
          VALUES (:email, :password_hash, :display_name, \'customer\', \'disabled\')
-         ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)',
-    );
-    $account->execute([
+         ';
+    $accountSql .= SqlDialect::isPostgreSQL($pdo)
+        ? 'ON CONFLICT (email) DO UPDATE SET display_name = users.display_name'
+        : 'ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)';
+    $userId = SqlDialect::insertId($pdo, $accountSql, [
         'email' => 'homepage-activity@example.invalid',
         'password_hash' => password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT),
         'display_name' => 'Marketplace Activity',
     ]);
-    $userId = (int) $pdo->lastInsertId();
-    if ($userId === 0) {
-        $lookupAccount = $pdo->prepare('SELECT id FROM users WHERE email = :email');
-        $lookupAccount->execute(['email' => 'homepage-activity@example.invalid']);
-        $userId = (int) $lookupAccount->fetchColumn();
-    }
 
     $sales = [
         ['cyberpunk-2077', 48],
@@ -54,7 +51,7 @@ WHERE product.slug = :product_slug
 ORDER BY offer.price_minor ASC, offer.id ASC
 LIMIT 1
 SQL);
-    $createOrder = $pdo->prepare(<<<'SQL'
+    $createOrderSql = <<<'SQL'
 INSERT INTO orders (
     user_id,
     status,
@@ -71,12 +68,15 @@ VALUES (
     :subtotal_minor,
     :total_minor,
     :idempotency_key,
-    UTC_TIMESTAMP(6)
+    CURRENT_TIMESTAMP(6)
 )
-ON DUPLICATE KEY UPDATE
-    id = LAST_INSERT_ID(id),
-    paid_at = UTC_TIMESTAMP(6)
-SQL);
+SQL;
+    $createOrderSql .= SqlDialect::isPostgreSQL($pdo)
+        ? ' ON CONFLICT (user_id, idempotency_key)
+            DO UPDATE SET paid_at = CURRENT_TIMESTAMP(6)'
+        : ' ON DUPLICATE KEY UPDATE
+            id = LAST_INSERT_ID(id),
+            paid_at = CURRENT_TIMESTAMP(6)';
     $insertItem = $pdo->prepare(<<<'SQL'
 INSERT INTO order_items (
     order_id,
@@ -115,24 +115,13 @@ SQL);
 
         $totalMinor = (int) $offer['price_minor'] * $unitsSold;
         $idempotencyKey = 'homepage-activity-' . $productSlug;
-        $createOrder->execute([
+        $orderId = SqlDialect::insertId($pdo, $createOrderSql, [
             'user_id' => $userId,
             'currency' => $offer['currency'],
             'subtotal_minor' => $totalMinor,
             'total_minor' => $totalMinor,
             'idempotency_key' => $idempotencyKey,
         ]);
-        $orderId = (int) $pdo->lastInsertId();
-        if ($orderId === 0) {
-            $findOrder = $pdo->prepare(
-                'SELECT id FROM orders WHERE user_id = :user_id AND idempotency_key = :idempotency_key',
-            );
-            $findOrder->execute([
-                'user_id' => $userId,
-                'idempotency_key' => $idempotencyKey,
-            ]);
-            $orderId = (int) $findOrder->fetchColumn();
-        }
 
         $insertItem->execute([
             'order_id' => $orderId,

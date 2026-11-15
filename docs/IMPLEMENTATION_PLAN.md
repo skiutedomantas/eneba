@@ -2,7 +2,7 @@
 
 ## Guiding sequence
 
-Build a thin vertical slice early, then extend it with tested business flows. Keep the approved React/PHP/MySQL stack; do not introduce a payment or search service before requirements justify it.
+Build a thin vertical slice early, then extend it with tested business flows. Keep the approved React/PHP/PDO stack, with MySQL as the default and PostgreSQL as a tested alternative; do not introduce a payment or external search service before requirements justify it.
 
 ## Phase 0 — Confirm boundaries
 
@@ -16,7 +16,7 @@ Build a thin vertical slice early, then extend it with tested business flows. Ke
 
 - Initialize React/TypeScript/Vite/Tailwind/React Router and the PHP API only after approval.
 - Add environment configuration examples, PHP front controller, API response/error conventions, and same-origin local proxy configuration.
-- Add MySQL migrations for identity, catalog, offers, cart, orders, encrypted key inventory, and banners; add reproducible seed data.
+- Add database-specific migrations for identity, catalog, offers, cart, orders, encrypted key inventory, and banners; add reproducible seed data for both MySQL and PostgreSQL.
 - Add smoke tests for API startup, DB connection, migrations, and health/status endpoint.
 
 **Exit:** repeatable local setup and migrations; no secrets committed.
@@ -49,7 +49,7 @@ Build a thin vertical slice early, then extend it with tested business flows. Ke
 
 ## Phase 3 — Search and product comparison
 
-- Implement `GET /search` using Unicode-normalized input, MySQL FULLTEXT natural/prefix matching, a bounded gram-index fallback, and relevance-first pagination. Apply catalog filters before scoring no more than 100 candidates.
+- Implement `GET /search` using Unicode-normalized input, the selected database's full-text natural/prefix matching, a bounded gram-index fallback, and relevance-first pagination. Apply catalog filters before scoring no more than 100 candidates.
 - Maintain the derived name-gram index during seeding and provide an explicit rebuild command for catalog name/status changes. Cap fuzzy candidates at 100 and apply search request rate limiting in Phase 6.
 - Implement `GET /products/{slug}` with active product details and active offers from approved sellers, including seller, platform, region, compare-at/current price, discount, and available inventory.
 - Maintain multiple seller profiles and comparable offers on active game products. Product cards and comparison pages show price, platform, region, and discounts without inventory status labels.
@@ -93,6 +93,16 @@ Build a thin vertical slice early, then extend it with tested business flows. Ke
 - Ran focused and full backend suites, frontend production build/type-check and lint, PHP syntax checks, and deployment configuration checks.
 
 **Exit:** reproducible deployment configuration, documented limitations, and a passing registration-to-key-delivery workflow.
+
+## Database portability — PostgreSQL alternative
+
+- Added PostgreSQL-specific migrations while retaining all MySQL migrations and MySQL as the default `DB_DRIVER`.
+- Adapted PDO connection setup, UTC session time, generated IDs, idempotent upserts, binary encrypted-key storage, date cutoffs, SQLSTATE handling, and row-locking behavior for both supported engines.
+- PostgreSQL search uses its GIN-indexed `simple` text-search configuration; both engines share the derived gram fallback and PHP similarity cap.
+- Backend tests run unchanged against a disposable database selected by environment. A MySQL-to-PostgreSQL data-copy utility is not included; production cutover requires a separately reviewed/rehearsed ETL, sequence reset, key-ring preservation, and rollback plan.
+- Verified all backend endpoint and user-journey suites on both engines, including concurrent checkout against one available key.
+
+**Exit:** MySQL remains available; PostgreSQL migration, seeding, search, checkout, and full backend integration tests pass before any MySQL removal is considered.
 
 ## Priority order
 

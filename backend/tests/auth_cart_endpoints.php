@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Database\Connection;
+use App\Database\SqlDialect;
 use App\Repositories\AuthRepository;
 use App\Repositories\CartRepository;
 use App\Services\AuthService;
@@ -60,6 +61,7 @@ try {
         'The session should resolve to the account ID, not the session row ID.',
     );
     try {
+        $pdo->exec('SAVEPOINT duplicate_registration');
         $auth->register([
             'email' => $email,
             'password' => 'marketplace-test-password',
@@ -67,15 +69,18 @@ try {
         ], '203.0.113.44', null);
         throw new RuntimeException('A duplicate account email was accepted.');
     } catch (ApiException $exception) {
+        $pdo->exec('ROLLBACK TO SAVEPOINT duplicate_registration');
+        $pdo->exec('RELEASE SAVEPOINT duplicate_registration');
         expect($exception->errorCode === 'EMAIL_ALREADY_REGISTERED', 'Unexpected duplicate-email error.');
     }
 
     $expireSession = $pdo->prepare(
         'UPDATE sessions
-         SET expires_at = UTC_TIMESTAMP(6) - INTERVAL 1 SECOND
+         SET expires_at = :expired_at
          WHERE token_hash = :token_hash',
     );
     $expireSession->execute([
+        'expired_at' => SqlDialect::timestampSecondsAgo(1),
         'token_hash' => hash('sha256', $registration['sessionToken']),
     ]);
     expect(

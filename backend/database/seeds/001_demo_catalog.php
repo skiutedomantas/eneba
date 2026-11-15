@@ -2,7 +2,10 @@
 
 declare(strict_types=1);
 
+use App\Database\SqlDialect;
+
 return static function (\PDO $pdo): void {
+    $postgres = SqlDialect::isPostgreSQL($pdo);
     $categories = [
         ['action', 'Action', 10],
         ['role-playing', 'Role-playing', 20],
@@ -16,14 +19,18 @@ return static function (\PDO $pdo): void {
         ['shooter', 'Shooter', 100],
         ['survival', 'Survival', 110],
     ];
-    $insertCategory = $pdo->prepare(
-        'INSERT INTO categories (slug, name, status, sort_order)
+    $categorySql = 'INSERT INTO categories (slug, name, status, sort_order)
          VALUES (:slug, :name, \'active\', :sort_order)
-         ON DUPLICATE KEY UPDATE
-            name = VALUES(name),
-            status = \'active\',
-            sort_order = VALUES(sort_order)',
-    );
+         ' . ($postgres
+            ? 'ON CONFLICT (slug) DO UPDATE SET
+                name = EXCLUDED.name,
+                status = \'active\',
+                sort_order = EXCLUDED.sort_order'
+            : 'ON DUPLICATE KEY UPDATE
+                name = VALUES(name),
+                status = \'active\',
+                sort_order = VALUES(sort_order)');
+    $insertCategory = $pdo->prepare($categorySql);
     foreach ($categories as [$slug, $name, $sortOrder]) {
         $insertCategory->execute([
             'slug' => $slug,
@@ -37,11 +44,12 @@ return static function (\PDO $pdo): void {
         ['playstation-5', 'PlayStation 5'],
         ['xbox-series', 'Xbox Series X|S'],
     ];
-    $insertPlatform = $pdo->prepare(
-        'INSERT INTO platforms (code, name, status)
+    $platformSql = 'INSERT INTO platforms (code, name, status)
          VALUES (:code, :name, \'active\')
-         ON DUPLICATE KEY UPDATE name = VALUES(name), status = \'active\'',
-    );
+         ' . ($postgres
+            ? 'ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, status = \'active\''
+            : 'ON DUPLICATE KEY UPDATE name = VALUES(name), status = \'active\'');
+    $insertPlatform = $pdo->prepare($platformSql);
     foreach ($platforms as [$code, $name]) {
         $insertPlatform->execute(['code' => $code, 'name' => $name]);
     }
@@ -51,11 +59,12 @@ return static function (\PDO $pdo): void {
         ['eu', 'Europe'],
         ['us', 'United States'],
     ];
-    $insertRegion = $pdo->prepare(
-        'INSERT INTO regions (code, name, status)
+    $regionSql = 'INSERT INTO regions (code, name, status)
          VALUES (:code, :name, \'active\')
-         ON DUPLICATE KEY UPDATE name = VALUES(name), status = \'active\'',
-    );
+         ' . ($postgres
+            ? 'ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, status = \'active\''
+            : 'ON DUPLICATE KEY UPDATE name = VALUES(name), status = \'active\'');
+    $insertRegion = $pdo->prepare($regionSql);
     foreach ($regions as [$code, $name]) {
         $insertRegion->execute(['code' => $code, 'name' => $name]);
     }
@@ -244,8 +253,9 @@ return static function (\PDO $pdo): void {
     ];
 
     $insertProduct = $pdo->prepare(
-        'INSERT IGNORE INTO products (slug, name, description, status)
-         VALUES (:slug, :name, :description, \'active\')',
+        'INSERT ' . ($postgres ? '' : 'IGNORE ') . 'INTO products (slug, name, description, status)
+         VALUES (:slug, :name, :description, \'active\')'
+            . ($postgres ? ' ON CONFLICT (slug) DO NOTHING' : ''),
     );
     $refreshProduct = $pdo->prepare(
         'UPDATE products
@@ -254,10 +264,11 @@ return static function (\PDO $pdo): void {
     );
     $categoryId = $pdo->prepare('SELECT id FROM categories WHERE slug = :slug');
     $insertProductCategory = $pdo->prepare(
-        'INSERT IGNORE INTO product_categories (product_id, category_id)
+        'INSERT ' . ($postgres ? '' : 'IGNORE ') . 'INTO product_categories (product_id, category_id)
          SELECT product.id, :category_id
          FROM products AS product
-         WHERE product.slug = :product_slug',
+         WHERE product.slug = :product_slug'
+            . ($postgres ? ' ON CONFLICT (product_id, category_id) DO NOTHING' : ''),
     );
     foreach ($products as [$slug, $name, $description, $productCategories]) {
         $values = ['slug' => $slug, 'name' => $name, 'description' => $description];

@@ -367,3 +367,23 @@ The user approved Phase 6 hardening and requested an end-to-end registration-to-
 - `git diff --check` passed.
 - The local `/api/v1/health` endpoint returned HTTP 200 with database status `ok` and the expected defensive response headers.
 
+## PostgreSQL portability — preserving MySQL support
+
+### Request
+
+Review the backend and database documentation for MySQL-specific dependencies, add a PostgreSQL migration path, and preserve the existing MySQL implementation until PostgreSQL validation succeeds.
+
+### Changes
+
+- Added opt-in `DB_DRIVER=pgsql` support while retaining MySQL as the default. The migration runner selects engine-specific migrations and uses PostgreSQL advisory locks and per-migration transactions.
+- Added PostgreSQL schema migrations and a shared `SqlDialect` helper for inserted IDs, binary values, timestamp cutoffs, unique violations, and retryable transaction errors.
+- Adapted repositories, services, seeds, fictional-key storage, search, and integration tests for PostgreSQL while keeping MySQL-specific query behavior intact.
+- Documented engine-specific schema/query differences, runtime configuration, deployment, search behavior, and a staged MySQL-to-PostgreSQL cutover and rollback approach. No data-copy utility or dual-write path is implied.
+- Added database-dialect tests for driver behavior, binary round-tripping, and inserted IDs.
+
+### Validation
+
+- All seven backend test suites passed against both MySQL and PostgreSQL 16, including search, checkout/key delivery, concurrent checkout, the user journey, and database-dialect checks.
+- PostgreSQL migrations, catalog/offers/homepage seeds, search-index generation, and fictional-key seeding were rerun successfully; repeated seed runs added no duplicate fictional keys.
+- PHP syntax checks across `backend/` and `git diff --check` passed.
+

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Repositories;
 
+use App\Database\SqlDialect;
 use PDO;
 
 final class CartRepository
@@ -15,11 +16,10 @@ final class CartRepository
     public function userCartId(int $userId, bool $create = false, bool $lock = false): ?int
     {
         if ($create) {
-            $insert = $this->pdo->prepare(
-                'INSERT INTO carts (user_id)
-                 VALUES (:user_id)
-                 ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)',
-            );
+            $sql = SqlDialect::isPostgreSQL($this->pdo)
+                ? 'INSERT INTO carts (user_id) VALUES (:user_id) ON CONFLICT (user_id) DO NOTHING'
+                : 'INSERT INTO carts (user_id) VALUES (:user_id) ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)';
+            $insert = $this->pdo->prepare($sql);
             $insert->execute(['user_id' => $userId]);
         }
 
@@ -39,11 +39,10 @@ final class CartRepository
         bool $lock = false,
     ): ?int {
         if ($create) {
-            $insert = $this->pdo->prepare(
-                'INSERT INTO carts (guest_token_hash)
-                 VALUES (:guest_token_hash)
-                 ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)',
-            );
+            $sql = SqlDialect::isPostgreSQL($this->pdo)
+                ? 'INSERT INTO carts (guest_token_hash) VALUES (:guest_token_hash) ON CONFLICT (guest_token_hash) DO NOTHING'
+                : 'INSERT INTO carts (guest_token_hash) VALUES (:guest_token_hash) ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)';
+            $insert = $this->pdo->prepare($sql);
             $insert->execute(['guest_token_hash' => $guestTokenHash]);
         }
 
@@ -85,7 +84,9 @@ JOIN platforms AS platform ON platform.id = offer.platform_id
 JOIN regions AS region ON region.id = offer.region_id
 WHERE offer.id = :offer_id
 LIMIT 1
-SQL . ($lock ? ' FOR UPDATE' : ''));
+SQL . ($lock
+            ? (SqlDialect::isPostgreSQL($this->pdo) ? ' FOR UPDATE OF offer' : ' FOR UPDATE')
+            : ''));
         $statement->execute(['offer_id' => $offerId]);
         $offer = $statement->fetch();
 

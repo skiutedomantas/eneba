@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Database\SqlDialect;
 use App\Repositories\OrderRepository;
 use App\Security\DigitalKeyCipher;
 use App\Support\ApiException;
@@ -173,7 +174,7 @@ final class CheckoutService
                 ];
             });
         } catch (PDOException $exception) {
-            if (($exception->errorInfo[1] ?? null) === 1062) {
+            if (SqlDialect::isUniqueViolation($exception)) {
                 $existingOrderId = $this->orders->orderIdForIdempotency($userId, $idempotencyKey);
                 if ($existingOrderId !== null) {
                     $result = [
@@ -289,11 +290,10 @@ final class CheckoutService
                 if ($ownsTransaction && $this->pdo->inTransaction()) {
                     $this->pdo->rollBack();
                 }
-                $driverCode = $exception->errorInfo[1] ?? null;
                 if (
                     $ownsTransaction
                     && $attempt < 2
-                    && in_array($driverCode, [1205, 1213], true)
+                    && SqlDialect::isRetryableTransactionFailure($exception)
                 ) {
                     continue;
                 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Repositories;
 
+use App\Database\SqlDialect;
 use PDO;
 
 final class OrderRepository
@@ -58,7 +59,7 @@ final class OrderRepository
         $statement->execute(['cart_id' => $cartId]);
 
         return array_map(
-            static fn (array $row): array => [
+            fn (array $row): array => [
                 'id' => (int) $row['id'],
                 'offer_id' => (int) $row['offer_id'],
                 'quantity' => (int) $row['quantity'],
@@ -93,7 +94,9 @@ JOIN platforms AS platform ON platform.id = offer.platform_id
 JOIN regions AS region ON region.id = offer.region_id
 WHERE offer.id = :offer_id
 LIMIT 1
-SQL . ($lock ? ' FOR UPDATE' : ''));
+SQL . ($lock
+            ? (SqlDialect::isPostgreSQL($this->pdo) ? ' FOR UPDATE OF offer' : ' FOR UPDATE')
+            : ''));
         $statement->execute(['offer_id' => $offerId]);
         $offer = $statement->fetch();
 
@@ -106,7 +109,10 @@ SQL . ($lock ? ' FOR UPDATE' : ''));
     public function availableKeysForUpdate(int $offerId, int $quantity): array
     {
         $statement = $this->pdo->prepare(
-            'SELECT id, ciphertext, nonce, key_version
+            'SELECT id, '
+            . SqlDialect::binaryColumn($this->pdo, 'ciphertext') . ' AS ciphertext, '
+            . SqlDialect::binaryColumn($this->pdo, 'nonce') . ' AS nonce,
+                    key_version
              FROM digital_keys
              WHERE offer_id = :offer_id AND status = \'available\'
              ORDER BY id
@@ -118,10 +124,10 @@ SQL . ($lock ? ' FOR UPDATE' : ''));
         $statement->execute();
 
         return array_map(
-            static fn (array $row): array => [
+            fn (array $row): array => [
                 'id' => (int) $row['id'],
-                'ciphertext' => (string) $row['ciphertext'],
-                'nonce' => (string) $row['nonce'],
+                'ciphertext' => SqlDialect::binaryColumnValue($this->pdo, $row['ciphertext']),
+                'nonce' => SqlDialect::binaryColumnValue($this->pdo, $row['nonce']),
                 'key_version' => (int) $row['key_version'],
             ],
             $statement->fetchAll(),
@@ -134,24 +140,23 @@ SQL . ($lock ? ' FOR UPDATE' : ''));
         int $totalMinor,
         string $idempotencyKey,
     ): int {
-        $statement = $this->pdo->prepare(
+        return SqlDialect::insertId(
+            $this->pdo,
             "INSERT INTO orders (
                 user_id, status, currency, subtotal_minor, total_minor,
                 idempotency_key, paid_at
              ) VALUES (
                 :user_id, 'paid', :currency, :subtotal_minor, :total_minor,
-                :idempotency_key, UTC_TIMESTAMP(6)
+                :idempotency_key, CURRENT_TIMESTAMP(6)
              )",
+            [
+                'user_id' => $userId,
+                'currency' => $currency,
+                'subtotal_minor' => $totalMinor,
+                'total_minor' => $totalMinor,
+                'idempotency_key' => $idempotencyKey,
+            ],
         );
-        $statement->execute([
-            'user_id' => $userId,
-            'currency' => $currency,
-            'subtotal_minor' => $totalMinor,
-            'total_minor' => $totalMinor,
-            'idempotency_key' => $idempotencyKey,
-        ]);
-
-        return (int) $this->pdo->lastInsertId();
     }
 
     public function createOrderItem(
@@ -165,7 +170,8 @@ SQL . ($lock ? ' FOR UPDATE' : ''));
         int $unitPriceMinor,
         string $currency,
     ): int {
-        $statement = $this->pdo->prepare(
+        return SqlDialect::insertId(
+            $this->pdo,
             'INSERT INTO order_items (
                 order_id, offer_id, product_name_snapshot, seller_name_snapshot,
                 platform_name_snapshot, region_name_snapshot, quantity,
@@ -174,20 +180,18 @@ SQL . ($lock ? ' FOR UPDATE' : ''));
                 :order_id, :offer_id, :product_name, :seller_name, :platform_name,
                 :region_name, :quantity, :unit_price_minor, :currency
              )',
+            [
+                'order_id' => $orderId,
+                'offer_id' => $offerId,
+                'product_name' => $productName,
+                'seller_name' => $sellerName,
+                'platform_name' => $platformName,
+                'region_name' => $regionName,
+                'quantity' => $quantity,
+                'unit_price_minor' => $unitPriceMinor,
+                'currency' => $currency,
+            ],
         );
-        $statement->execute([
-            'order_id' => $orderId,
-            'offer_id' => $offerId,
-            'product_name' => $productName,
-            'seller_name' => $sellerName,
-            'platform_name' => $platformName,
-            'region_name' => $regionName,
-            'quantity' => $quantity,
-            'unit_price_minor' => $unitPriceMinor,
-            'currency' => $currency,
-        ]);
-
-        return (int) $this->pdo->lastInsertId();
     }
 
     /**
@@ -295,8 +299,10 @@ SQL . ($lock ? ' FOR UPDATE' : ''));
     {
         $statement = $this->pdo->prepare(
             'SELECT item.id AS order_item_id, item.offer_id, item.product_name_snapshot,
-                    item.quantity, key_row.id AS key_id, key_row.ciphertext,
-                    key_row.nonce, key_row.key_version
+                    item.quantity, key_row.id AS key_id, '
+                    . SqlDialect::binaryColumn($this->pdo, 'key_row.ciphertext') . ' AS ciphertext, '
+                    . SqlDialect::binaryColumn($this->pdo, 'key_row.nonce') . ' AS nonce,
+                    key_row.key_version
              FROM order_items AS item
              JOIN digital_keys AS key_row
                ON key_row.order_item_id = item.id AND key_row.status = \'sold\'
@@ -305,7 +311,14 @@ SQL . ($lock ? ' FOR UPDATE' : ''));
         );
         $statement->execute(['order_id' => $orderId]);
 
-        return $statement->fetchAll();
+        return array_map(
+            fn (array $row): array => [
+                ...$row,
+                'ciphertext' => SqlDialect::binaryColumnValue($this->pdo, $row['ciphertext']),
+                'nonce' => SqlDialect::binaryColumnValue($this->pdo, $row['nonce']),
+            ],
+            $statement->fetchAll(),
+        );
     }
 
     public function recordKeyAccess(int $userId, int $orderItemId, string $requestId): void

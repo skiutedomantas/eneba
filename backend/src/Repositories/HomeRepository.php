@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Repositories;
 
+use App\Database\SqlDialect;
 use PDO;
 
 final class HomeRepository
@@ -21,8 +22,8 @@ final class HomeRepository
             "SELECT id, title, image_url, target_url, sort_order
              FROM hero_banners
              WHERE status = 'active'
-               AND (starts_at IS NULL OR starts_at <= UTC_TIMESTAMP(6))
-               AND (ends_at IS NULL OR ends_at > UTC_TIMESTAMP(6))
+               AND (starts_at IS NULL OR starts_at <= CURRENT_TIMESTAMP(6))
+               AND (ends_at IS NULL OR ends_at > CURRENT_TIMESTAMP(6))
              ORDER BY sort_order ASC, id ASC
              LIMIT :limit",
         );
@@ -53,7 +54,7 @@ WITH recent_sales AS (
     JOIN order_items AS item ON item.order_id = purchase.id
     JOIN offers AS offer ON offer.id = item.offer_id
     WHERE purchase.status = 'paid'
-      AND purchase.paid_at >= UTC_TIMESTAMP(6) - INTERVAL 30 DAY
+      AND purchase.paid_at >= :recent_cutoff
     GROUP BY offer.product_id
 ),
 inventory AS (
@@ -118,6 +119,7 @@ ORDER BY recent_sales.units_sold DESC, product.name ASC, product.id ASC
 LIMIT :limit
 SQL);
         $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $statement->bindValue(':recent_cutoff', SqlDialect::timestampDaysAgo(30));
         $statement->execute();
 
         return $statement->fetchAll();
@@ -165,8 +167,8 @@ JOIN regions AS region
 LEFT JOIN inventory ON inventory.offer_id = offer.id
 WHERE offer.status = 'active'
   AND offer.compare_at_price_minor > offer.price_minor
-  AND (offer.deal_starts_at IS NULL OR offer.deal_starts_at <= UTC_TIMESTAMP(6))
-  AND (offer.deal_ends_at IS NULL OR offer.deal_ends_at > UTC_TIMESTAMP(6))
+  AND (offer.deal_starts_at IS NULL OR offer.deal_starts_at <= CURRENT_TIMESTAMP(6))
+  AND (offer.deal_ends_at IS NULL OR offer.deal_ends_at > CURRENT_TIMESTAMP(6))
 GROUP BY
     offer.id,
     product.id,
@@ -209,12 +211,13 @@ JOIN product_categories AS product_category ON product_category.product_id = pro
 JOIN categories AS category
   ON category.id = product_category.category_id AND category.status = 'active'
 WHERE purchase.status = 'paid'
-  AND purchase.paid_at >= UTC_TIMESTAMP(6) - INTERVAL 30 DAY
+  AND purchase.paid_at >= :recent_cutoff
 GROUP BY category.id, category.slug, category.name
 ORDER BY units_sold DESC, category.sort_order ASC, category.name ASC, category.id ASC
 LIMIT :limit
 SQL);
         $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $statement->bindValue(':recent_cutoff', SqlDialect::timestampDaysAgo(30));
         $statement->execute();
 
         return array_map(

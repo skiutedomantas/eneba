@@ -2,7 +2,7 @@
 
 ## Scope and assumptions
 
-This design describes an MVP digital-goods marketplace inspired by Eneba. It uses React, TypeScript, Vite, Tailwind CSS, React Router, PHP 8.3+, PDO, and MySQL 8+. It does not initialize either application or add dependencies.
+This design describes an MVP digital-goods marketplace inspired by Eneba. It uses React, TypeScript, Vite, Tailwind CSS, React Router, PHP 8.3+, and PDO with MySQL 8 by default or PostgreSQL 14+. A deployment selects one engine through `DB_DRIVER`; the two databases are not dual-written.
 
 Assumptions to keep the first implementation bounded:
 
@@ -26,7 +26,7 @@ Browser
                                             -> repositories (PDO)
                                                    |
                                                    v
-                                               MySQL 8
+                                    MySQL 8 (default) or PostgreSQL 14+
 ```
 
 The PHP API owns authorization, validation, pricing, availability, order state transitions, and digital-key access. The browser renders server-returned data and must never be treated as authoritative for prices, inventory, order status, or ownership.
@@ -127,6 +127,7 @@ Reusable React components should own consistent styling and behavior: site heade
 
 - Serve the built SPA and `/api/v1` through HTTPS on the same origin. In development, use Vite's proxy to forward API requests to PHP.
 - Configure database credentials, session settings, a versioned digital-key encryption key ring, and environment-specific options through environment variables. Keep real secrets outside version control.
+- Select `DB_DRIVER=mysql` or `DB_DRIVER=pgsql`; the matching migration directory is applied by the migration runner. PostgreSQL uses the optional `DB_SSLMODE` setting.
 - Return JSON for API responses, use UTC timestamps, and centralize error formatting and request IDs.
 - Limit JSON request bodies to 16 KiB and throttle search per hashed client IP.
 - Add migrations and deterministic seed data before relying on manually edited databases.
@@ -150,7 +151,7 @@ Use consistent HTTP status codes and a JSON error envelope (see `API.md`). Valid
 
 | Decision | Rationale |
 |---|---|
-| One PHP API and one MySQL database for MVP | Fits the required technologies and avoids distributed-system complexity. |
+| One PHP API and one selected PDO database for MVP | MySQL remains the default; PostgreSQL is supported as an alternative without dual writes or distributed-system complexity. |
 | Same-origin API and SPA | Makes secure cookie sessions and CSRF controls straightforward. |
 | Service/repository separation | Keeps transaction-heavy checkout and independently maintained homepage queries testable. |
 | Integer minor-unit prices plus currency code | Avoids floating-point rounding errors; currency is explicit. |
@@ -159,7 +160,7 @@ Use consistent HTTP status codes and a JSON error envelope (see `API.md`). Valid
 | Cart references offers, not client prices | Allows price comparison and fresh totals on every read without trusting browser-submitted amounts. |
 | Cart editing independent of key inventory | Keeps active demo offers usable without inventing key stock; checkout remains the stock authority. |
 | Database-backed key inventory with application-layer encryption | Keeps inventory and orders transactionally consistent while limiting the value of a database-only leak. |
-| Search on MySQL plus a bounded typo-tolerant fallback | Meets the current scale and avoids requiring a separate search service prematurely. |
+| Native full-text search per database plus one bounded typo-tolerant fallback | Uses MySQL FULLTEXT or PostgreSQL GIN/tsquery with the same bounded gram fallback, avoiding an external search service at current scale. |
 | No real payment integration in this design | The requested checkout is simulated; payment processing requires separate security, compliance, and product decisions. |
 | Semantic design tokens and shared React components | Keeps the specified color palette and sharp geometry consistent across responsive pages and makes later visual changes local. |
 

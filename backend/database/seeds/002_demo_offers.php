@@ -2,47 +2,39 @@
 
 declare(strict_types=1);
 
+use App\Database\SqlDialect;
+
 return static function (\PDO $pdo): void {
     $sellerIdFor = static function (string $email, string $displayName) use ($pdo): int {
-        $user = $pdo->prepare(
-            'INSERT INTO users (email, password_hash, display_name, role, status)
+        $userSql = 'INSERT INTO users (email, password_hash, display_name, role, status)
              VALUES (:email, :password_hash, :display_name, \'customer\', \'disabled\')
-             ON DUPLICATE KEY UPDATE
+             ';
+        $userSql .= SqlDialect::isPostgreSQL($pdo)
+            ? 'ON CONFLICT (email) DO UPDATE SET display_name = EXCLUDED.display_name'
+            : 'ON DUPLICATE KEY UPDATE
                 id = LAST_INSERT_ID(id),
-                display_name = VALUES(display_name)',
-        );
-        $user->execute([
+                display_name = VALUES(display_name)';
+        $userId = SqlDialect::insertId($pdo, $userSql, [
             'email' => $email,
             'password_hash' => password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT),
             'display_name' => $displayName,
         ]);
-        $userId = (int) $pdo->lastInsertId();
-        if ($userId === 0) {
-            $lookupUser = $pdo->prepare('SELECT id FROM users WHERE email = :email');
-            $lookupUser->execute(['email' => $email]);
-            $userId = (int) $lookupUser->fetchColumn();
-        }
 
-        $seller = $pdo->prepare(
-            'INSERT INTO seller_profiles (user_id, display_name, status)
+        $sellerSql = 'INSERT INTO seller_profiles (user_id, display_name, status)
              VALUES (:user_id, :display_name, \'approved\')
-             ON DUPLICATE KEY UPDATE
+             ';
+        $sellerSql .= SqlDialect::isPostgreSQL($pdo)
+            ? 'ON CONFLICT (user_id) DO UPDATE SET
+                display_name = EXCLUDED.display_name,
+                status = \'approved\''
+            : 'ON DUPLICATE KEY UPDATE
                 id = LAST_INSERT_ID(id),
                 display_name = VALUES(display_name),
-                status = \'approved\'',
-        );
-        $seller->execute([
+                status = \'approved\'';
+        $sellerId = SqlDialect::insertId($pdo, $sellerSql, [
             'user_id' => $userId,
             'display_name' => $displayName,
         ]);
-        $sellerId = (int) $pdo->lastInsertId();
-        if ($sellerId === 0) {
-            $lookupSeller = $pdo->prepare(
-                'SELECT id FROM seller_profiles WHERE user_id = :user_id',
-            );
-            $lookupSeller->execute(['user_id' => $userId]);
-            $sellerId = (int) $lookupSeller->fetchColumn();
-        }
 
         return $sellerId;
     };

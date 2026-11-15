@@ -230,7 +230,7 @@ The three examples correspond to `/categories`, `/platforms`, and `/regions`, re
 - The same `platform`, `region`, `category`, `currency`, `minPriceMinor`, and `maxPriceMinor` filters as `/products`
 - `sort`: `relevance` (default), `newest`, `price_asc`, `price_desc`, or `popular`
 
-Queries are Unicode NFKC-normalized, case-folded, and reduced to letter/number tokens with collapsed whitespace. MySQL FULLTEXT natural-language and token-prefix matches are ranked first. When fewer than eight FULLTEXT candidates are found, the API merges up to 1,000 candidates from the derived product-name gram index. It applies the product's catalog filters before scoring title similarity in PHP, which is limited to 100 products; ordinary catalog requests do not invoke fuzzy scoring.
+Queries are Unicode NFKC-normalized, case-folded, and reduced to letter/number tokens with collapsed whitespace. The selected database supplies first-pass relevance and token-prefix matching: MySQL FULLTEXT natural-language/boolean matching or PostgreSQL `simple`-configuration full-text matching. When fewer than eight lexical candidates are found, the API merges up to 1,000 candidates from the derived product-name gram index. It applies the product's catalog filters before scoring title similarity in PHP, which is limited to 100 products; ordinary catalog requests do not invoke fuzzy scoring.
 
 Search response:
 

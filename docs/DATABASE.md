@@ -2,8 +2,8 @@
 
 ## Conventions
 
-- MySQL 8, InnoDB, `utf8mb4`, and UTC timestamps.
-- Use `BIGINT UNSIGNED` identifiers (or consistently adopted UUIDs) and foreign keys for relational integrity.
+- MySQL 8 (default) or PostgreSQL 14+, with PDO and UTC timestamps. The application connects to one database engine per deployment.
+- Use `BIGINT` identifiers (unsigned on MySQL) or consistently adopted UUIDs, with foreign keys for relational integrity.
 - Store money as `BIGINT` integer minor units with an ISO 4217 currency code. Never use floating-point columns for prices.
 - Use `created_at` and `updated_at` where records change; use explicit statuses instead of deleting records whose history matters.
 - Store password hashes from `password_hash()` only. Never store plaintext passwords, session tokens, or plaintext digital keys.
@@ -63,7 +63,7 @@ The repeatable catalog seed creates 30 active games across 11 categories and 61 
 |---|---|---|
 | `product_search_grams` | `product_id`, `gram`, `weight` | Derived two/three-character gram index for typo-tolerant fallback; unique `(product_id, gram)`, index `(gram, product_id)`. Rebuild when product names or active status change. |
 
-MySQL `FULLTEXT` over product name and description provides first-pass relevance and token-prefix search. Gram rows are derived data generated from normalized active product names. The repeatable seed refreshes them, and `php backend/bin/rebuild-search-index.php` rebuilds them after catalog name/status changes. Search normalization uses PHP `intl` and `mbstring`; these extensions must be enabled in the backend runtime. See `API.md` for query bounds, fallback behavior, and response metadata.
+MySQL `FULLTEXT` over product name and description or PostgreSQL full-text search (`simple` configuration with a GIN expression index) provides first-pass relevance and token-prefix matching. Both engines use the same normalized name-gram fallback for typo and mid-word partial matching. Gram rows are derived data generated from normalized active product names. The repeatable seed refreshes them, and `php backend/bin/rebuild-search-index.php` rebuilds them after catalog name/status changes. Search normalization uses PHP `intl` and `mbstring`; these extensions must be enabled in the backend runtime. See `API.md` for query bounds, fallback behavior, and response metadata.
 
 ## Relationships
 
@@ -88,7 +88,7 @@ Add indexes for:
 - `digital_keys(offer_id, status, id)` for availability/locking and `digital_keys(order_item_id)` for order delivery.
 - Unique `carts.guest_token_hash`; `cart_items(cart_id, offer_id)` unique; `auth_rate_limits(action, subject_hash)` primary key; `orders(user_id, created_at)`; `order_items(order_id)`.
 - `product_categories(category_id, product_id)` and gram lookup `(gram, product_id)`.
-- A MySQL full-text index on active-search fields where supported by the chosen query design.
+- MySQL full-text index or PostgreSQL GIN full-text expression index, depending on the selected database.
 
 The rate-limit action enum includes `login`, `register`, and `search`. A scheduled maintenance task should delete rows whose `window_started_at` is older than two days; counters are operational state and can be safely rebuilt.
 
@@ -103,4 +103,32 @@ Cart rows are not reservations and do not hold key inventory. A guest cart is id
 The current selling price is always read from `offers.price_minor` when rendering cart contents and is revalidated again during checkout. Soft-disabled offers remain joinable so the cart can clearly mark them unavailable and allow removal without losing the selected-offer reference. Cart updates require an active offer, active product/platform/region, and approved seller, but do not query or reserve `digital_keys`. Guests may browse and edit their cart; checkout must require an authenticated user.
 
 The simulated purchase operation has no real payment provider and marks the order paid only in the same transaction that commits all assigned keys. Keys are fictional and explicitly non-redeemable. Key plaintext is encrypted at insertion with Sodium `secretbox`, using a random nonce; only the delivery service decrypts after checking order ownership and paid status. Configure a JSON key ring in `KEY_ENCRYPTION_KEYS` and select the active version with `KEY_ENCRYPTION_KEY_VERSION`; retain older key versions for decryption during rotation. A future real payment provider would require a separately designed reservation/expiry and payment-confirmation workflow, not an open database transaction around a network call.
+
+## Database portability and migration plan
+
+The backend supports one selected engine at a time through `DB_DRIVER=mysql` (the default) or `DB_DRIVER=pgsql`. Both use PDO prepared statements and the same repositories/services. Do not configure both engines for dual writes.
+
+| Concern | MySQL implementation | PostgreSQL implementation |
+|---|---|---|
+| Schema | Existing migrations in `backend/database/migrations/`; InnoDB, unsigned auto-increment IDs, enum columns, `VARBINARY`, and `utf8mb4` | Separate migrations in `backend/database/migrations/postgresql/`; identity IDs, checked `VARCHAR` status columns, `BYTEA`, and standard UTF-8 |
+| Migration runner | MySQL advisory named lock; DDL follows MySQL's implicit-commit behavior | PostgreSQL advisory lock; each migration and its migration-history insert run in a transaction |
+| Idempotent inserts | `ON DUPLICATE KEY UPDATE` and `INSERT IGNORE` | `ON CONFLICT` |
+| Inserted IDs | PDO `lastInsertId()` | `INSERT ... RETURNING id` |
+| Time | Connection session set to UTC; MySQL date intervals are confined to its rate-limit SQL | Connection session set to UTC; bounded report cutoffs are passed as UTC parameters |
+| Search | MySQL FULLTEXT natural/boolean token-prefix search | PostgreSQL `to_tsvector`/`plainto_tsquery`/`to_tsquery` with a GIN expression index |
+| Encrypted bytes | Binary columns | `BYTEA`; the PDO layer base64-encodes bind values into PostgreSQL `decode()` and decodes selected values after `encode()` |
+| Lock/error handling | `FOR UPDATE`; MySQL deadlock/lock timeout and duplicate-key codes | `FOR UPDATE`; SQLSTATE handling for deadlock, serialization failure, lock-unavailable, and unique violation |
+
+Both schema variants preserve the same table and API contracts, foreign-key deletion rules, price/inventory constraints, and checkout atomicity. PostgreSQL uses a trigger to maintain the same `updated_at` behavior as MySQL's `ON UPDATE CURRENT_TIMESTAMP`. Database time calculations use UTC session settings; application-computed date cutoffs are passed as prepared parameters to avoid engine-specific interval expressions.
+
+### Safe cutover from MySQL
+
+1. **Rehearse on isolated databases.** Keep the live MySQL database unchanged. Create a disposable PostgreSQL database and set `DB_DRIVER=pgsql`, `DB_PORT=5432`, and `DB_SSLMODE` to the required deployment value.
+2. **Create schema and reference data.** Run `php backend/bin/migrate.php`, then `php backend/bin/seed.php` against the empty PostgreSQL database. The runner selects the PostgreSQL migration directory from the PDO driver. Do not run test suites or fictional-key seeding against production.
+3. **Migrate existing records separately.** This repository does not yet include a MySQL-to-PostgreSQL data-copy command. If preserving live data, use a reviewed ETL/export-import process that maps unsigned IDs to PostgreSQL `BIGINT`, converts enum values and timestamps, preserves digital-key ciphertext/nonce bytes exactly, imports foreign-key dependencies in order, and resets identity sequences above each imported maximum ID. Preserve user sessions only if their token hashes and expiration policy are intentionally being carried over; otherwise require users to sign in again.
+4. **Rebuild derived search data and verify counts.** Run `php backend/bin/rebuild-search-index.php`, compare per-table counts and key relationships, and verify that every encrypted key can be authenticated using the separately backed-up key ring. Rehearse restore and checkout/key delivery on staging.
+5. **Run both-engine regression suites.** Run every backend test against a disposable PostgreSQL database and rerun them against MySQL. The checkout/concurrency and user-journey tests are required before cutover.
+6. **Switch once, with rollback available.** Back up MySQL and the encryption key ring, stop writes during the final data copy, switch the PHP environment/credentials to PostgreSQL, and perform health plus customer-flow smoke tests. Do not dual-write. If validation fails, restore the previous application configuration and MySQL backup; retain PostgreSQL read-only for diagnosis until reconciliation is complete.
+
+The schema migrations create a fresh database; they do not automatically copy existing MySQL records. PostgreSQL cutover of an active marketplace therefore requires a separately rehearsed data migration and consistency check. Both engines must use the same application encryption key ring to preserve key decryption.
 

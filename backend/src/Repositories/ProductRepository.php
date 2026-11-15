@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Repositories;
 
+use App\Database\SqlDialect;
 use PDO;
 use PDOStatement;
 
@@ -22,7 +23,7 @@ paid_sales AS (
     JOIN order_items AS item ON item.order_id = purchase.id
     JOIN offers AS offer ON offer.id = item.offer_id
     WHERE purchase.status = 'paid'
-      AND purchase.paid_at >= UTC_TIMESTAMP(6) - INTERVAL 30 DAY
+      AND purchase.paid_at >= :paid_sales_cutoff
     GROUP BY offer.product_id
 ),
 ranked_offers AS (
@@ -77,7 +78,10 @@ SQL;
             return ['products' => [], 'total' => 0];
         }
 
-        $bindings = [':currency' => $filters['currency']];
+        $bindings = [
+            ':currency' => $filters['currency'],
+            ':paid_sales_cutoff' => SqlDialect::timestampDaysAgo(30),
+        ];
         $offerConditions = '';
         $candidateConditions = '';
         if ($productIds !== null) {
@@ -155,6 +159,10 @@ SQL;
             default => 'product.created_at DESC, product.id DESC',
         };
 
+        $mainBindings = [
+            ...$bindings,
+            ':category_sales_cutoff' => SqlDialect::timestampDaysAgo(30),
+        ];
         $statement = $this->pdo->prepare(
             $ctes . <<<'SQL'
 
@@ -164,7 +172,7 @@ SQL;
     JOIN order_items AS item ON item.order_id = purchase.id
     JOIN offers AS offer ON offer.id = item.offer_id
     WHERE purchase.status = 'paid'
-      AND purchase.paid_at >= UTC_TIMESTAMP(6) - INTERVAL 30 DAY
+      AND purchase.paid_at >= :category_sales_cutoff
     GROUP BY offer.product_id
 )
 SELECT
@@ -191,7 +199,7 @@ SQL
             . $whereSql
             . "\nORDER BY {$orderBy}\nLIMIT :limit OFFSET :offset",
         );
-        $this->bindValues($statement, $bindings);
+        $this->bindValues($statement, $mainBindings);
         $statement->bindValue(':limit', $filters['perPage'], PDO::PARAM_INT);
         $statement->bindValue(
             ':offset',

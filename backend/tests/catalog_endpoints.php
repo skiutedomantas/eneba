@@ -35,8 +35,8 @@ $offerSummary = $pdo->query(
         COUNT(*) AS active_offers,
         COUNT(DISTINCT platform_id) AS platforms,
         COUNT(DISTINCT region_id) AS regions,
-        SUM(compare_at_price_minor > price_minor) AS discounted_offers,
-        SUM(currency != 'EUR') AS non_eur_offers
+        SUM(CASE WHEN compare_at_price_minor > price_minor THEN 1 ELSE 0 END) AS discounted_offers,
+        SUM(CASE WHEN currency != 'EUR' THEN 1 ELSE 0 END) AS non_eur_offers
      FROM offers
      WHERE status = 'active'",
 )->fetch();
@@ -135,10 +135,16 @@ foreach ($priceFiltered['data'] as $filteredProduct) {
     );
 }
 
-$priceSorted = $catalog->listProducts(['sort' => 'price_asc']);
+$priceSorted = $catalog->listProducts(['sort' => 'price_asc', 'perPage' => '48']);
+$sortedPrices = array_map(
+    static fn (array $product): int => $product['lowestOffer']['priceMinor'],
+    $priceSorted['data'],
+);
+$expectedSortedPrices = $sortedPrices;
+sort($expectedSortedPrices, SORT_NUMERIC);
 expect(
-    $priceSorted['data'][0]['slug'] === 'terraria',
-    'Price ascending sorting did not select the least expensive offer first.',
+    $sortedPrices === $expectedSortedPrices,
+    'Price ascending sorting did not order products by their lowest matching offer.',
 );
 
 try {

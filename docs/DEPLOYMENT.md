@@ -1,14 +1,14 @@
 # Deployment Guide
 
-This is a same-origin, educational marketplace deployment: the Vite-built React app is served as static files, and Nginx forwards `/api/v1/` to PHP-FPM. MySQL remains on a private network. Do not expose the PHP source tree or root `.env` through the static web root.
+This is a same-origin, educational marketplace deployment: the Vite-built React app is served as static files, and Nginx forwards `/api/v1/` to PHP-FPM. MySQL or PostgreSQL remains on a private network. Do not expose the PHP source tree or root `.env` through the static web root.
 
 > **Scope limitation:** this project has simulated payments, fictional non-redeemable key seeding for non-production environments, and no admin/seller operations or production key-upload workflow. It is suitable for a private educational preview, not real commercial sales or real digital keys.
 
 ## 1. Runtime requirements
 
 - Node.js `20.19+` or `22.12+` on the build machine; Node is not required on the web server.
-- PHP `8.3+` with `pdo_mysql`, `sodium`, `intl`, and `mbstring`.
-- MySQL `8+` using InnoDB and `utf8mb4`.
+- PHP `8.3+` with `pdo_mysql` or `pdo_pgsql`, plus `sodium`, `intl`, and `mbstring`.
+- MySQL `8+` using InnoDB and `utf8mb4` (default), or PostgreSQL `14+`.
 - Nginx with PHP-FPM and a TLS certificate.
 - A private network path from PHP-FPM to MySQL. Do not expose MySQL to the public internet.
 
@@ -18,7 +18,7 @@ Check PHP extensions with:
 php -m
 ```
 
-Confirm `PDO`, `pdo_mysql`, `sodium`, `intl`, and `mbstring` are present. The same extensions must be enabled for the PHP-FPM runtime and CLI migration runner.
+Confirm `PDO`, the selected PDO driver (`pdo_mysql` or `pdo_pgsql`), `sodium`, `intl`, and `mbstring` are present. The same extensions must be enabled for the PHP-FPM runtime and CLI migration runner.
 
 ## 2. Provision MySQL
 
@@ -32,7 +32,20 @@ CREATE DATABASE gamehub
 
 Create a dedicated application account and restrict it to this database. Run schema migrations with a separate deployment account that has the required DDL privileges; the long-running PHP-FPM account should need only the DML privileges required by the application. Use your secret manager or deployment platform to supply credentials—do not put passwords in shell history or commit them.
 
-Set `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, and `DB_PASSWORD` for both the migration process and PHP-FPM. Prefer a local socket/private network and enable database TLS when traffic leaves the host or trusted private segment.
+Set `DB_DRIVER=mysql`, `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, and `DB_PASSWORD` for both the migration process and PHP-FPM. Prefer a local socket/private network and enable database TLS when traffic leaves the host or trusted private segment.
+
+### PostgreSQL alternative
+
+For PostgreSQL, provision PostgreSQL 14 or newer and a dedicated database/user with the needed schema and runtime privileges. Set `DB_DRIVER=pgsql`, use the exact server host and database settings, and configure `DB_SSLMODE` (`require` or stricter verification when supported by the deployment). The default PostgreSQL port is `5432`; `DB_SSLMODE` defaults to `prefer`. PostgreSQL migrations are loaded from `backend/database/migrations/postgresql/` and use advisory locking plus one transaction per migration. MySQL remains the default; do not dual-write to both engines.
+
+For a fresh database, apply migrations and seeds with the selected environment:
+
+```sh
+DB_DRIVER=pgsql php backend/bin/migrate.php
+DB_DRIVER=pgsql php backend/bin/seed.php
+```
+
+Changing the driver only selects the schema/query dialect; it does not copy existing MySQL data. Follow the [database cutover plan](./DATABASE.md#safe-cutover-from-mysql) and rehearse a data conversion, search-index rebuild, sequence reset, key-ring check, and rollback before moving existing records.
 
 ## 3. Configure PHP secrets
 
@@ -43,11 +56,14 @@ Configure at least:
 ```dotenv
 APP_ENV=production
 SESSION_COOKIE_SECURE=true
+DB_DRIVER=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_DATABASE=gamehub
 DB_USERNAME=gamehub_app
 DB_PASSWORD=<provided-by-secret-manager>
+# PostgreSQL only:
+# DB_SSLMODE=require
 KEY_ENCRYPTION_KEYS='{"1":"<base64-encoded-32-byte-secret>"}'
 KEY_ENCRYPTION_KEY_VERSION=1
 ```
@@ -150,12 +166,20 @@ curl --fail --silent --show-error https://marketplace.example.com/api/v1/health
 
 Then exercise registration, login, cart updates, simulated checkout, order history, and key reveal in staging with fictional inventory. Check the browser network panel for same-origin requests, secure/HttpOnly/SameSite cookies, and absence of secrets in responses or logs. A key response must remain `Cache-Control: no-store`.
 
-Back up MySQL and the encryption key ring as separate protected assets. For example, use a protected MySQL client option file rather than putting passwords on the command line:
+Back up the selected database and the encryption key ring as separate protected assets. For example, use a protected MySQL client option file rather than putting passwords on the command line:
 
 ```sh
 mysqldump --defaults-extra-file=/secure/backup-client.cnf \
   --single-transaction --routines --triggers gamehub > gamehub.sql
 ```
+
+For PostgreSQL, use a protected `PGPASSFILE` or platform secret mechanism:
+
+```sh
+pg_dump --format=custom --file=gamehub.pgdump gamehub
+```
+
+Restore a PostgreSQL custom-format backup with `pg_restore` into a provisioned, isolated database. Keep the engine-specific migrations and environment settings aligned with the application release.
 
 For restoration, provision an isolated database, restore the dump with a privileged deployment account, install the matching encryption key ring (including every version referenced by stored keys), deploy the matching application build, then verify health and order/key delivery in staging before switching traffic. Keep backups encrypted and access-controlled; a database backup without its key ring cannot restore digital-key delivery.
 
@@ -164,6 +188,13 @@ Rate-limit counters are operational state. A daily maintenance job may remove ex
 ```sql
 DELETE FROM auth_rate_limits
 WHERE window_started_at < UTC_TIMESTAMP(6) - INTERVAL 2 DAY;
+```
+
+For PostgreSQL:
+
+```sql
+DELETE FROM auth_rate_limits
+WHERE window_started_at < CURRENT_TIMESTAMP - INTERVAL '2 days';
 ```
 
 Do not run schema changes, seed scripts, or test suites against production without a separately reviewed release procedure and verified backup.

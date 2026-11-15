@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Database\Connection;
+use App\Database\SqlDialect;
 use App\Repositories\CartRepository;
 use App\Repositories\OrderRepository;
 use App\Security\DigitalKeyCipher;
@@ -98,47 +99,53 @@ SQL)->fetch();
         throw new RuntimeException('An active catalog offer is required for the concurrency test.');
     }
 
-    $offerInsert = $pdo->prepare(
+    $offerId = SqlDialect::insertId(
+        $pdo,
         "INSERT INTO offers (
             product_id, seller_id, platform_id, region_id,
             price_minor, currency, status
          ) VALUES (
             :product_id, :seller_id, :platform_id, :region_id, 100, 'EUR', 'active'
          )",
-    );
-    $offerInsert->execute([
+        [
         'product_id' => $reference['product_id'],
         'seller_id' => $reference['seller_id'],
         'platform_id' => $reference['platform_id'],
         'region_id' => $reference['region_id'],
-    ]);
-    $offerId = (int) $pdo->lastInsertId();
-
-    $insertUser = $pdo->prepare(
-        'INSERT INTO users (email, password_hash, display_name)
-         VALUES (:email, :password_hash, :display_name)',
+        ],
     );
+
     foreach (['a', 'b'] as $label) {
-        $insertUser->execute([
+        $userIds[] = SqlDialect::insertId(
+            $pdo,
+            'INSERT INTO users (email, password_hash, display_name)
+             VALUES (:email, :password_hash, :display_name)',
+            [
             'email' => "concurrent-{$label}-{$suffix}@example.test",
             'password_hash' => password_hash(bin2hex(random_bytes(24)), PASSWORD_DEFAULT),
             'display_name' => 'Concurrent Checkout Test',
-        ]);
-        $userIds[] = (int) $pdo->lastInsertId();
+            ],
+        );
     }
 
     $encrypted = $cipher->encrypt('GAMEHUB-DEMO-NOT-REDEEMABLE-CONCURRENT', $offerId);
-    $insertKey = $pdo->prepare(
+    $keyId = SqlDialect::insertId(
+        $pdo,
         "INSERT INTO digital_keys (offer_id, ciphertext, nonce, key_version, status)
-         VALUES (:offer_id, :ciphertext, :nonce, :key_version, 'available')",
-    );
-    $insertKey->execute([
+         VALUES (
+            :offer_id,
+            " . SqlDialect::binaryParameter($pdo, ':ciphertext') . ",
+            " . SqlDialect::binaryParameter($pdo, ':nonce') . ",
+            :key_version,
+            'available'
+         )",
+        [
         'offer_id' => $offerId,
-        'ciphertext' => $encrypted['ciphertext'],
-        'nonce' => $encrypted['nonce'],
+        'ciphertext' => SqlDialect::binaryParameterValue($pdo, $encrypted['ciphertext']),
+        'nonce' => SqlDialect::binaryParameterValue($pdo, $encrypted['nonce']),
         'key_version' => $encrypted['keyVersion'],
-    ]);
-    $keyId = (int) $pdo->lastInsertId();
+        ],
+    );
     $pdo->commit();
 
     $cartService = new CartService($pdo, new CartRepository($pdo));
@@ -146,7 +153,7 @@ SQL)->fetch();
         $cartService->add($userId, ['offerId' => $offerId, 'quantity' => 1]);
     }
 
-    unset($cartService, $offerInsert, $insertUser, $insertKey);
+    unset($cartService);
     $pdo = null;
 
     foreach ($resultPaths as $index => $resultPath) {

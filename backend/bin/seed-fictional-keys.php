@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Database\Connection;
+use App\Database\SqlDialect;
 use App\Security\DigitalKeyCipher;
 
 require dirname(__DIR__) . '/bootstrap.php';
@@ -42,7 +43,13 @@ SQL)->fetchAll(PDO::FETCH_COLUMN);
     $totalCount = $pdo->prepare('SELECT COUNT(*) FROM digital_keys WHERE offer_id = :offer_id');
     $insert = $pdo->prepare(
         "INSERT INTO digital_keys (offer_id, ciphertext, nonce, key_version, status)
-         VALUES (:offer_id, :ciphertext, :nonce, :key_version, 'available')",
+         VALUES (
+            :offer_id,
+            " . SqlDialect::binaryParameter($pdo, ':ciphertext') . ",
+            " . SqlDialect::binaryParameter($pdo, ':nonce') . ",
+            :key_version,
+            'available'
+         )",
     );
 
     foreach ($offers as $offerValue) {
@@ -62,8 +69,8 @@ SQL)->fetchAll(PDO::FETCH_COLUMN);
             $encrypted = $cipher->encrypt($plaintext, $offerId);
             $insert->execute([
                 'offer_id' => $offerId,
-                'ciphertext' => $encrypted['ciphertext'],
-                'nonce' => $encrypted['nonce'],
+                'ciphertext' => SqlDialect::binaryParameterValue($pdo, $encrypted['ciphertext']),
+                'nonce' => SqlDialect::binaryParameterValue($pdo, $encrypted['nonce']),
                 'key_version' => $encrypted['keyVersion'],
             ]);
             $available++;

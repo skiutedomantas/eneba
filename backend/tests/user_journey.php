@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Database\Connection;
+use App\Database\SqlDialect;
 use App\Repositories\AuthRepository;
 use App\Repositories\CartRepository;
 use App\Repositories\OrderRepository;
@@ -57,22 +58,22 @@ SQL)->fetch();
         throw new RuntimeException('An active offer is required for the user journey test.');
     }
 
-    $offerInsert = $pdo->prepare(
+    $offerId = SqlDialect::insertId(
+        $pdo,
         'INSERT INTO offers (
             product_id, seller_id, platform_id, region_id, price_minor, currency, status
          ) VALUES (
             :product_id, :seller_id, :platform_id, :region_id, :price_minor, :currency, \'active\'
          )',
-    );
-    $offerInsert->execute([
+        [
         'product_id' => $reference['product_id'],
         'seller_id' => $reference['seller_id'],
         'platform_id' => $reference['platform_id'],
         'region_id' => $reference['region_id'],
         'price_minor' => $reference['price_minor'],
         'currency' => $reference['currency'],
-    ]);
-    $offerId = (int) $pdo->lastInsertId();
+        ],
+    );
 
     $encryptedKey = $cipher->encrypt(
         'GAMEHUB-DEMO-NOT-REDEEMABLE-JOURNEY-' . $suffix,
@@ -80,12 +81,18 @@ SQL)->fetch();
     );
     $keyInsert = $pdo->prepare(
         "INSERT INTO digital_keys (offer_id, ciphertext, nonce, key_version, status)
-         VALUES (:offer_id, :ciphertext, :nonce, :key_version, 'available')",
+         VALUES (
+            :offer_id,
+            " . SqlDialect::binaryParameter($pdo, ':ciphertext') . ",
+            " . SqlDialect::binaryParameter($pdo, ':nonce') . ",
+            :key_version,
+            'available'
+         )",
     );
     $keyInsert->execute([
         'offer_id' => $offerId,
-        'ciphertext' => $encryptedKey['ciphertext'],
-        'nonce' => $encryptedKey['nonce'],
+        'ciphertext' => SqlDialect::binaryParameterValue($pdo, $encryptedKey['ciphertext']),
+        'nonce' => SqlDialect::binaryParameterValue($pdo, $encryptedKey['nonce']),
         'key_version' => $encryptedKey['keyVersion'],
     ]);
 

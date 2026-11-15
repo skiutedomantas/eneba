@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Database\Connection;
+use App\Database\SqlDialect;
 use App\Repositories\CartRepository;
 use App\Repositories\OrderRepository;
 use App\Security\DigitalKeyCipher;
@@ -38,27 +39,27 @@ $pdo->beginTransaction();
 try {
     $pdo->exec("UPDATE digital_keys SET status = 'disabled' WHERE status = 'available'");
 
-    $userInsert = $pdo->prepare(
+    $userId = SqlDialect::insertId(
+        $pdo,
         'INSERT INTO users (email, password_hash, display_name)
          VALUES (:email, :password_hash, :display_name)',
-    );
-    $userInsert->execute([
+        [
         'email' => "checkout-{$suffix}@example.test",
         'password_hash' => password_hash(bin2hex(random_bytes(24)), PASSWORD_DEFAULT),
         'display_name' => 'Checkout Test',
-    ]);
-    $userId = (int) $pdo->lastInsertId();
+        ],
+    );
 
-    $otherUserInsert = $pdo->prepare(
+    $otherUserId = SqlDialect::insertId(
+        $pdo,
         'INSERT INTO users (email, password_hash, display_name)
          VALUES (:email, :password_hash, :display_name)',
-    );
-    $otherUserInsert->execute([
+        [
         'email' => "checkout-other-{$suffix}@example.test",
         'password_hash' => password_hash(bin2hex(random_bytes(24)), PASSWORD_DEFAULT),
         'display_name' => 'Other Checkout Test',
-    ]);
-    $otherUserId = (int) $pdo->lastInsertId();
+        ],
+    );
 
     $offers = $pdo->query(<<<'SQL'
 SELECT offer.id, offer.price_minor, offer.currency
@@ -83,14 +84,20 @@ SQL)->fetchAll();
 
     $insertKey = $pdo->prepare(
         "INSERT INTO digital_keys (offer_id, ciphertext, nonce, key_version, status)
-         VALUES (:offer_id, :ciphertext, :nonce, :key_version, 'available')",
+         VALUES (
+            :offer_id,
+            " . SqlDialect::binaryParameter($pdo, ':ciphertext') . ",
+            " . SqlDialect::binaryParameter($pdo, ':nonce') . ",
+            :key_version,
+            'available'
+         )",
     );
-    $storeFictionalKey = static function (int $offerId, string $plaintext) use ($cipher, $insertKey): void {
+    $storeFictionalKey = static function (int $offerId, string $plaintext) use ($cipher, $insertKey, $pdo): void {
         $encrypted = $cipher->encrypt($plaintext, $offerId);
         $insertKey->execute([
             'offer_id' => $offerId,
-            'ciphertext' => $encrypted['ciphertext'],
-            'nonce' => $encrypted['nonce'],
+            'ciphertext' => SqlDialect::binaryParameterValue($pdo, $encrypted['ciphertext']),
+            'nonce' => SqlDialect::binaryParameterValue($pdo, $encrypted['nonce']),
             'key_version' => $encrypted['keyVersion'],
         ]);
     };
@@ -178,7 +185,7 @@ SQL)->fetchAll();
     } catch (ApiException $exception) {
         expectCheckout($exception->errorCode === 'ORDER_NOT_PAID', 'Unpaid key access should be rejected.');
     }
-    $pdo->prepare("UPDATE orders SET status = 'paid', paid_at = UTC_TIMESTAMP(6) WHERE id = :id")
+    $pdo->prepare("UPDATE orders SET status = 'paid', paid_at = CURRENT_TIMESTAMP(6) WHERE id = :id")
         ->execute(['id' => $orderId]);
 
     $insufficientOfferId = (int) $offers[1]['id'];
@@ -254,8 +261,14 @@ SQL)->fetchAll();
     );
     $corruptKey->execute(['offer_id' => $purchasableOfferId]);
     $corruptKeyId = (int) $corruptKey->fetchColumn();
-    $pdo->prepare('UPDATE digital_keys SET ciphertext = :ciphertext WHERE id = :id')
-        ->execute(['ciphertext' => 'invalid-ciphertext', 'id' => $corruptKeyId]);
+    $pdo->prepare(
+        'UPDATE digital_keys SET ciphertext = '
+        . SqlDialect::binaryParameter($pdo, ':ciphertext')
+        . ' WHERE id = :id',
+    )->execute([
+        'ciphertext' => SqlDialect::binaryParameterValue($pdo, 'invalid-ciphertext'),
+        'id' => $corruptKeyId,
+    ]);
     $invalidKeyRejected = false;
     try {
         $checkout->checkout($userId, 'invalid-key-test-' . $suffix, $requestId);

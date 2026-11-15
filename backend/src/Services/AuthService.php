@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Database\SqlDialect;
 use App\Repositories\AuthRepository;
 use App\Support\ApiException;
 use App\Support\ValidationError;
@@ -164,7 +165,7 @@ final class AuthService
                 ];
             });
         } catch (PDOException $exception) {
-            if (($exception->errorInfo[1] ?? null) === 1062) {
+            if (SqlDialect::isUniqueViolation($exception)) {
                 throw new ApiException(
                     409,
                     'EMAIL_ALREADY_REGISTERED',

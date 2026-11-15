@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Repositories;
 
+use App\Database\SqlDialect;
 use PDO;
 
 final class AuthRepository
@@ -41,17 +42,16 @@ final class AuthRepository
 
     public function createUser(string $email, string $passwordHash, string $displayName): int
     {
-        $statement = $this->pdo->prepare(
+        return SqlDialect::insertId(
+            $this->pdo,
             'INSERT INTO users (email, password_hash, display_name, role, status)
              VALUES (:email, :password_hash, :display_name, \'customer\', \'active\')',
-        );
-        $statement->execute([
+            [
             'email' => $email,
             'password_hash' => $passwordHash,
             'display_name' => $displayName,
-        ]);
-
-        return (int) $this->pdo->lastInsertId();
+            ],
+        );
     }
 
     public function createSession(int $userId, string $tokenHash, string $csrfTokenHash): void
@@ -64,14 +64,15 @@ final class AuthRepository
                 :user_id,
                 :token_hash,
                 :csrf_token_hash,
-                DATE_ADD(UTC_TIMESTAMP(6), INTERVAL 1209600 SECOND),
-                UTC_TIMESTAMP(6)
+                :expires_at,
+                CURRENT_TIMESTAMP(6)
              )',
         );
         $statement->execute([
             'user_id' => $userId,
             'token_hash' => $tokenHash,
             'csrf_token_hash' => $csrfTokenHash,
+            'expires_at' => SqlDialect::timestampAfterSeconds(1209600),
         ]);
     }
 
@@ -97,7 +98,7 @@ FROM sessions AS session
 JOIN users AS account ON account.id = session.user_id
 WHERE session.token_hash = :token_hash
   AND session.revoked_at IS NULL
-  AND session.expires_at > UTC_TIMESTAMP(6)
+  AND session.expires_at > CURRENT_TIMESTAMP(6)
   AND account.status = 'active'
   AND account.role = 'customer'
 LIMIT 1
@@ -109,7 +110,7 @@ SQL);
         }
 
         $touch = $this->pdo->prepare(
-            'UPDATE sessions SET last_seen_at = UTC_TIMESTAMP(6) WHERE id = :id',
+            'UPDATE sessions SET last_seen_at = CURRENT_TIMESTAMP(6) WHERE id = :id',
         );
         $touch->execute(['id' => $session['id']]);
 
@@ -139,7 +140,7 @@ SQL);
     {
         $statement = $this->pdo->prepare(
             'UPDATE sessions
-             SET revoked_at = UTC_TIMESTAMP(6)
+             SET revoked_at = CURRENT_TIMESTAMP(6)
              WHERE token_hash = :token_hash AND revoked_at IS NULL',
         );
         $statement->execute(['token_hash' => $tokenHash]);
@@ -153,29 +154,63 @@ SQL);
             'search' => 60,
             default => throw new \LogicException('Unsupported rate-limit action.'),
         };
-        $statement = $this->pdo->prepare(sprintf(
-            'INSERT INTO auth_rate_limits (
-                action, subject_hash, window_started_at, attempt_count
-             )
-             VALUES (:action, :subject_hash, UTC_TIMESTAMP(6), 1)
-             ON DUPLICATE KEY UPDATE
-                attempt_count = IF(
-                    window_started_at <= UTC_TIMESTAMP(6) - INTERVAL %d SECOND,
-                    1,
-                    attempt_count + 1
-                ),
-                window_started_at = IF(
-                    window_started_at <= UTC_TIMESTAMP(6) - INTERVAL %d SECOND,
-                    UTC_TIMESTAMP(6),
-                    window_started_at
-                )',
-            $windowSeconds,
-            $windowSeconds,
-        ));
-        $statement->execute([
-            'action' => $action,
-            'subject_hash' => $subjectHash,
-        ]);
+        if (SqlDialect::isPostgreSQL($this->pdo)) {
+            $statement = $this->pdo->prepare(<<<'SQL'
+INSERT INTO auth_rate_limits (
+    action, subject_hash, window_started_at, attempt_count, updated_at
+)
+VALUES (
+    :action, :subject_hash, :window_started_at, 1, :updated_at
+)
+ON CONFLICT (action, subject_hash) DO UPDATE SET
+    attempt_count = CASE
+        WHEN auth_rate_limits.window_started_at <= :expired_before_count THEN 1
+        ELSE auth_rate_limits.attempt_count + 1
+    END,
+    window_started_at = CASE
+        WHEN auth_rate_limits.window_started_at <= :expired_before_window
+            THEN :new_window_started_at
+        ELSE auth_rate_limits.window_started_at
+    END,
+    updated_at = :updated_at_value
+SQL);
+            $now = SqlDialect::timestampSecondsAgo(0);
+            $expiredBefore = SqlDialect::timestampSecondsAgo($windowSeconds);
+            $statement->execute([
+                'action' => $action,
+                'subject_hash' => $subjectHash,
+                'window_started_at' => $now,
+                'updated_at' => $now,
+                'expired_before_count' => $expiredBefore,
+                'expired_before_window' => $expiredBefore,
+                'new_window_started_at' => $now,
+                'updated_at_value' => $now,
+            ]);
+        } else {
+            $statement = $this->pdo->prepare(sprintf(
+                'INSERT INTO auth_rate_limits (
+                    action, subject_hash, window_started_at, attempt_count
+                 )
+                 VALUES (:action, :subject_hash, CURRENT_TIMESTAMP(6), 1)
+                 ON DUPLICATE KEY UPDATE
+                    attempt_count = IF(
+                        window_started_at <= CURRENT_TIMESTAMP(6) - INTERVAL %d SECOND,
+                        1,
+                        attempt_count + 1
+                    ),
+                    window_started_at = IF(
+                        window_started_at <= CURRENT_TIMESTAMP(6) - INTERVAL %d SECOND,
+                        CURRENT_TIMESTAMP(6),
+                        window_started_at
+                    )',
+                $windowSeconds,
+                $windowSeconds,
+            ));
+            $statement->execute([
+                'action' => $action,
+                'subject_hash' => $subjectHash,
+            ]);
+        }
 
         $count = $this->pdo->prepare(
             'SELECT attempt_count
