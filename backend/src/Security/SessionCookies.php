@@ -83,7 +83,7 @@ final class SessionCookies
             'path' => '/api/v1',
             'secure' => $secure,
             'httponly' => $httpOnly,
-            'samesite' => 'Lax',
+            'samesite' => $secure ? 'None' : 'Lax',
         ];
     }
 }
