@@ -2,6 +2,23 @@
 
 declare(strict_types=1);
 
+$allowedOrigin = 'https://gamehub-frontend-e140.onrender.com';
+
+if (isset($_SERVER['HTTP_ORIGIN']) &&
+    $_SERVER['HTTP_ORIGIN'] === $allowedOrigin) {
+    header('Access-Control-Allow-Origin: ' . $allowedOrigin);
+    header('Access-Control-Allow-Credentials: true');
+    header('Vary: Origin');
+}
+
+header('Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token, Accept');
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
+
 use App\Support\JsonResponse;
 
 $requestId = bin2hex(random_bytes(16));
